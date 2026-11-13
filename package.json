@@ -1,0 +1,21 @@
+{
+  "name": "rolcam",
+  "version": "0.1.0",
+  "description": "Avatar de personaje por cámara para partidas de rol online",
+  "main": "main.js",
+  "license": "GPL-3.0-or-later",
+  "scripts": {
+    "start": "electron .",
+    "recursos": "node scripts/descargar-recursos.js",
+    "postinstall": "node scripts/descargar-recursos.js"
+  },
+  "dependencies": {
+    "@mediapipe/tasks-vision": "1.2.2",
+    "@pixiv/three-vrm": "3.5.5",
+    "kalidokit": "1.1.5",
+    "three": "0.187.0"
+  },
+  "devDependencies": {
+    "electron": "^45.3.0"
+  }
+}

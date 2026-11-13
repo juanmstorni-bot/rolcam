@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>RolCam — Escenario</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #1d2230; color: #e8e8ea; font: 14px/1.4 system-ui, sans-serif; overflow: hidden; }
+  #lienzo { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
+  #panel { position: fixed; left: 16px; top: 16px; width: 300px; background: rgba(20,22,28,.9); border: 1px solid #343846; border-radius: 10px; padding: 14px; }
+  #panel h1 { font-size: 15px; margin: 0 0 8px; }
+  #panel label { display: block; margin: 8px 0; }
+  #panel button, #panel select { font: inherit; padding: 8px 12px; border-radius: 8px; border: 1px solid #5b7cfa; }
+  #panel button { background: #5b7cfa; color: #fff; cursor: pointer; }
+  #panel select { background: #1d2230; color: #e8e8ea; width: 100%; }
+  #panel button.secundario { background: transparent; color: #b9c6ff; width: 100%; margin: 4px 0; padding: 6px 12px; }
+  #panel input[type=file] { width: 100%; margin-top: 4px; }
+  #panel button:disabled { opacity: .5; cursor: default; }
+  #panel input[type=range] { width: 100%; }
+  #estado { margin: 8px 0; color: #b9bdc9; min-height: 2.8em; }
+  #medidas { font-variant-numeric: tabular-nums; color: #9fe3a8; white-space: pre; }
+  #soltar { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(91,124,250,.25); font-size: 22px; pointer-events: none; }
+  #elegir, #editor { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(12,13,18,.92); z-index: 10; gap: 24px; }
+  #elegir.abierto, #editor.abierto { display: flex; }
+  .caja { background: #1b1e27; border: 1px solid #343846; border-radius: 12px; padding: 20px; display: grid; gap: 10px; min-width: 260px; }
+  .caja p { margin: 0 0 4px; }
+  #elegir button, #editor button { font: inherit; padding: 9px 14px; border-radius: 8px; border: 1px solid #5b7cfa; background: #5b7cfa; color: #fff; cursor: pointer; }
+  #elegir button.plano, #editor button.plano { background: transparent; color: #b9c6ff; }
+  #editorMarco { position: relative; line-height: 0; touch-action: none; user-select: none; background: repeating-conic-gradient(#2a2e3a 0 25%, #20232d 0 50%) 0 0 / 20px 20px; }
+  #editorImg { max-width: 58vw; max-height: 84vh; display: block; }
+  #circuloCabeza { position: absolute; border: 2px solid #ffd35b; border-radius: 50%; pointer-events: none; box-sizing: border-box; }
+  .asa { position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; background: #ffd35b; border: 2px solid #14161c; cursor: grab; box-sizing: border-box; }
+  .asa.chica { width: 12px; height: 12px; margin: -6px 0 0 -6px; }
+  .asa.ojo { background: #6fd3ff; }
+  .asa.boca { background: #ff8fb3; }
+  #editorLado { width: 270px; display: grid; gap: 8px; align-content: start; }
+  #editorLado h2 { font-size: 16px; margin: 0; }
+  #editorLado p { margin: 0; color: #c4c8d4; }
+  .muestra { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #ffd35b; margin-right: 4px; }
+  .muestra.ojo { background: #6fd3ff; } .muestra.boca { background: #ff8fb3; }
+  small { color: #8b90a0; display: block; margin-top: 6px; }
+  body.limpio #panel { display: none; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "/node_modules/three/build/three.module.js",
+    "three/addons/": "/node_modules/three/examples/jsm/",
+    "@pixiv/three-vrm": "/node_modules/@pixiv/three-vrm/lib/three-vrm.module.min.js",
+    "kalidokit": "/node_modules/kalidokit/dist/kalidokit.es.js"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="lienzo"></canvas>
+<div id="soltar">Soltá el personaje (.vrm, .glb, .fbx) o una imagen</div>
+
+<div id="elegir">
+  <div class="caja">
+    <p>¿Cómo querés usar esta imagen?</p>
+    <button id="elegirPersonaje">Como personaje</button>
+    <button id="elegirFondo">Como fondo</button>
+    <button id="elegirCancelar" class="plano">Cancelar</button>
+  </div>
+</div>
+
+<div id="editor">
+  <div id="editorMarco">
+    <img id="editorImg" alt="" draggable="false">
+    <div id="circuloCabeza"></div>
+    <div class="asa" data-k="cabeza" title="Centro de la cabeza"></div>
+    <div class="asa chica" data-k="radio" title="Tamaño de la cabeza"></div>
+    <div class="asa ojo" data-k="ojoI" title="Ojo"></div>
+    <div class="asa ojo" data-k="ojoD" title="Ojo"></div>
+    <div class="asa boca" data-k="boca" title="Boca"></div>
+  </div>
+  <div id="editorLado">
+    <h2>Marcá el personaje</h2>
+    <p>Arrastrá los puntos sobre la imagen:</p>
+    <p><span class="muestra"></span> Círculo: que rodee la <b>cara</b>, del mentón a la frente. El punto chico cambia el tamaño.</p>
+    <p><span class="muestra ojo"></span> Celestes: uno sobre cada <b>ojo</b>.</p>
+    <p><span class="muestra boca"></span> Rosa: sobre la <b>boca</b>.</p>
+    <label><input id="editorOjos" type="checkbox" checked> Animar parpadeo</label>
+    <label><input id="editorBoca" type="checkbox" checked> Animar boca</label>
+    <label><input id="editorFondo" type="checkbox"> Quitar fondo liso de la imagen</label>
+    <button id="editorListo">Listo</button>
+    <button id="editorCancelar" class="plano">Cancelar</button>
+  </div>
+</div>
+
+<div id="panel">
+  <h1>RolCam</h1>
+  <button id="iniciar">Activar cámara</button>
+  <div id="estado">Cargando personaje de ejemplo…</div>
+  <div id="medidas"></div>
+  <label>Modo de seguimiento
+    <select id="modo">
+      <option value="completo">Completo: cuerpo, cara y manos</option>
+      <option value="liviano">Liviano: cuerpo y cara, sin dedos</option>
+    </select>
+  </label>
+  <label>Filtro anti-temblor <input id="temblor" type="range" min="0" max="1" step="0.05" value="0.8"></label>
+  <label>Suavizado <input id="suavizado" type="range" min="0" max="1" step="0.05" value="0.6"></label>
+  <label>Color de fondo <input id="fondo" type="color" value="#1d2230"></label>
+  <label>Imagen de fondo <input id="fondoImagen" type="file" accept="image/png,image/jpeg,image/webp"></label>
+  <button id="quitarFondo" class="secundario">Quitar imagen de fondo</button>
+  <label>Personaje desde una imagen <input id="imagenPersonaje" type="file" accept="image/png,image/jpeg,image/webp"></label>
+  <button id="editarTitere" class="secundario" hidden>Ajustar marcadores del personaje</button>
+  <button id="personajeEjemplo" class="secundario">Volver al personaje de ejemplo</button>
+  <label><input id="pausa" type="checkbox"> Pausar seguimiento</label>
+  <small>Arrastrá a la ventana un personaje 3D (.vrm, .glb o .fbx) o una imagen (fondo o personaje ilustrado). La app los recuerda.</small>
+  <small>Tecla H: ocultar o mostrar este panel (ocultalo antes de capturar la ventana).</small>
+</div>
+
+<script type="module" src="./escenario.js"></script>
+</body>
+</html>
