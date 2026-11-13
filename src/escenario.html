@@ -16,6 +16,10 @@
   #panel input[type=file] { width: 100%; margin-top: 4px; }
   #panel button:disabled { opacity: .5; cursor: default; }
   #panel input[type=range] { width: 100%; }
+  #panel { max-height: calc(100vh - 60px); overflow-y: auto; }
+  #panel fieldset { border: 1px solid #343846; border-radius: 8px; margin: 10px 0; padding: 8px 10px; }
+  #panel legend { color: #b9c6ff; padding: 0 4px; }
+  #camEstado { color: #b9bdc9; margin: 6px 0; }
   #estado { margin: 8px 0; color: #b9bdc9; min-height: 2.8em; }
   #medidas { font-variant-numeric: tabular-nums; color: #9fe3a8; white-space: pre; }
   #soltar { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(91,124,250,.25); font-size: 22px; pointer-events: none; }
@@ -93,6 +97,19 @@
   <button id="iniciar">Activar cámara</button>
   <div id="estado">Cargando personaje de ejemplo…</div>
   <div id="medidas"></div>
+  <fieldset>
+    <legend>Cámara virtual</legend>
+    <button id="camBoton">Iniciar cámara virtual</button>
+    <div id="camEstado">Apagada.</div>
+    <label>Calidad
+      <select id="camCalidad">
+        <option value="1280x720">Alta (1280 × 720)</option>
+        <option value="640x360">Liviana (640 × 360)</option>
+      </select>
+    </label>
+    <button id="camInstalar" class="secundario">Instalar cámara virtual en Windows</button>
+    <button id="camDesinstalar" class="secundario">Desinstalar cámara virtual</button>
+  </fieldset>
   <label>Modo de seguimiento
     <select id="modo">
       <option value="completo">Completo: cuerpo, cara y manos</option>

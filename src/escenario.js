@@ -106,11 +106,11 @@ async function cargarImportado(url, nombre, formato) {
     const nuevo = await cargarModeloGenerico(url, formato);
     instalarPersonaje(nuevo, nombre);
     ponerEstado('Personaje listo: ' + nombre + '. Huesos reconocidos: ' + nuevo.informe.reconocidos +
-      (nuevo.informe.conDedos ? ', con dedos.' : ', sin dedos.') + ' Este formato no trae expresiones de cara.');
+      (nuevo.informe.conDedos ? ', con dedos.' : ', sin dedos.') + (nuevo.informe.enganchados ? ' Piezas sueltas enganchadas: ' + nuevo.informe.enganchados + '.' : '') + ' Este formato no trae expresiones de cara.');
     return true;
   } catch (e) {
     console.error('No se pudo importar el modelo: ' + (e.stack || e.message || e));
-    ponerEstado(e.faltan ? e.message + ' El modelo necesita un esqueleto humanoide con nombres de hueso estándar.'
+    ponerEstado(e.faltan ? e.message + ' El modelo necesita un esqueleto humanoide con nombres de hueso estándar. La lista de huesos quedó en la terminal.'
       : 'No se pudo leer ese archivo como modelo 3D (' + nombre + ').');
     return false;
   }
@@ -230,7 +230,7 @@ const VIS_MIN = 0.5;
 // Efecto espejo: el brazo izquierdo real (puntos 11, 13, 15) mueve el derecho del personaje.
 const INDICES_BRAZO = { Right: [11, 13, 15], Left: [12, 14, 16] };
 const REPOSO_LARGO = { Left: new THREE.Vector3(1, 0, 0), Right: new THREE.Vector3(-1, 0, 0) };
-const estadoBrazo = { Left: { q: null, largo: null, visto: 0 }, Right: { q: null, largo: null, visto: 0 } };
+const estadoBrazo = { Left: { q: null, largo: null, visto: 0, munecaVista: 0 }, Right: { q: null, largo: null, visto: 0, munecaVista: 0 } };
 
 function resolverBrazo(lado, lm, lm2d) {
   const [ih, ic, im] = INDICES_BRAZO[lado];
@@ -302,6 +302,16 @@ function moverBrazo(lado, cuerpo3d, cuerpo2d, mano) {
     return;
   }
   st.visto = ahora;
+  // Si la muñeca no se ve bien (fuera de cuadro o tapada) por un rato, lo más probable es que
+  // el brazo esté descansando: vuelve al reposo en vez de quedar a medio levantar.
+  if (brazo.inferior) st.munecaVista = ahora;
+  else if (ahora - st.munecaVista > 700) {
+    fijarEuler(min + 'UpperArm', { x: 0, y: 0, z: lado === 'Left' ? 1.25 : -1.25 });
+    fijarHueso(min + 'LowerArm', new THREE.Quaternion());
+    fijarHueso(min + 'Hand', new THREE.Quaternion());
+    st.q = null;
+    return;
+  }
   const supObjetivo = brazo.superior.clone().multiply(raiz);
   fijarHueso(min + 'UpperArm', padreMundo.clone().invert().multiply(supObjetivo));
   let qInf = null, antebrazoMundo = null;
@@ -561,6 +571,40 @@ $('quitarFondo').addEventListener('click', () => { quitarFondoImagen(); $('fondo
 $('personajeEjemplo').addEventListener('click', () => { cargarVRM('/recursos/muestra.vrm', 'personaje de ejemplo'); guardar({ tipoPersonaje: 'vrm', personaje: null }); });
 window.addEventListener('keydown', (e) => { if (e.key === 'h' || e.key === 'H') document.body.classList.toggle('limpio'); });
 
+// ---------- Cámara virtual ----------
+// Cada cuadro dibujado se copia a un lienzo de tamaño fijo (recortando lo que sobra)
+// y se manda al proceso principal, que alimenta la cámara "RolCam". El panel de
+// controles no forma parte del dibujo, así que nunca sale en la cámara.
+let camaraActiva = false, lienzoCam = null, ctxCam = null, ultimoEnvioCam = 0;
+function enviarCuadroCamara(ahora) {
+  if (!camaraActiva || ahora - ultimoEnvioCam < 1000 / 30 - 3) return;
+  ultimoEnvioCam = ahora;
+  const origen = renderer.domElement, W = lienzoCam.width, H = lienzoCam.height;
+  const aOrigen = origen.width / origen.height, aDestino = W / H;
+  let sx = 0, sy = 0, sw = origen.width, sh = origen.height;
+  if (aOrigen > aDestino) { sw = origen.height * aDestino; sx = (origen.width - sw) / 2; }
+  else { sh = origen.width / aDestino; sy = (origen.height - sh) / 2; }
+  ctxCam.drawImage(origen, sx, sy, sw, sh, 0, 0, W, H);
+  puente.enviar('camara-cuadro', new Uint8Array(ctxCam.getImageData(0, 0, W, H).data.buffer));
+}
+function pedirCamara() {
+  const [ancho, alto] = $('camCalidad').value.split('x').map(Number);
+  lienzoCam = document.createElement('canvas');
+  lienzoCam.width = ancho; lienzoCam.height = alto;
+  ctxCam = lienzoCam.getContext('2d', { willReadFrequently: true });
+  $('camEstado').textContent = 'Iniciando…';
+  puente.enviar('camara', { tipo: 'iniciar', ancho, alto });
+}
+$('camBoton').addEventListener('click', () => { if (camaraActiva) puente.enviar('camara', { tipo: 'detener' }); else pedirCamara(); });
+$('camCalidad').addEventListener('change', () => { if (camaraActiva) puente.enviar('camara', { tipo: 'detener' }); });
+$('camInstalar').addEventListener('click', () => puente.enviar('camara', { tipo: 'instalar' }));
+$('camDesinstalar').addEventListener('click', () => puente.enviar('camara', { tipo: 'desinstalar' }));
+puente.recibir('camara-estado', ({ activa, texto }) => {
+  camaraActiva = !!activa;
+  $('camBoton').textContent = camaraActiva ? 'Detener cámara virtual' : 'Iniciar cámara virtual';
+  $('camEstado').textContent = texto || (camaraActiva ? 'Activa.' : 'Apagada.');
+});
+
 // ---------- Bucle de dibujo ----------
 let tAnterior = performance.now();
 function bucle() {
@@ -572,6 +616,7 @@ function bucle() {
   if (vrm) vrm.update(dt);
   if (titere) titere.actualizar(dt, 1 - Math.exp(-dt * (30 - 26 * Number($('suavizado').value))));
   renderer.render(escena, camara);
+  enviarCuadroCamara(tAhora);
   cuadrosDib++;
   const ahora = performance.now();
   if (ahora - t0Medidas >= 1000) {
@@ -668,5 +713,6 @@ if (puente.prueba && !puente.prueba2d) {
       console.log('PRUEBA animar OK, objetivos de hueso: ' + objetivosHueso.size);
     } catch (e) { console.error('PRUEBA animar FALLÓ: ' + (e.stack || e)); }
     pedirInicio();
+    if (puente.pruebaCamara) pedirCamara();
   }, 4000);
 }

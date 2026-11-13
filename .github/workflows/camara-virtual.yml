@@ -1,0 +1,83 @@
+# Compila la cámara virtual de RolCam en los servidores de GitHub (no hace falta
+# tener Visual Studio en ninguna PC). El resultado queda como "artifact" descargable
+# en la pestaña Actions del repositorio.
+name: Camara virtual
+
+on:
+  push:
+    paths:
+      - 'nativo/**'
+      - '.github/workflows/camara-virtual.yml'
+  workflow_dispatch:
+
+env:
+  # Versión exacta de Softcam (MIT) que se compila.
+  SOFTCAM_COMMIT: d1acde4617782f87a3929d7a7528fa3e524ec56b
+
+jobs:
+  compilar:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bajar Softcam
+        shell: pwsh
+        run: |
+          git clone https://github.com/tshino/softcam softcam
+          git -C softcam checkout $env:SOFTCAM_COMMIT
+
+      # La cámara aparece como "RolCam" y usa identificadores propios,
+      # para no chocar con otros programas que también usen Softcam.
+      - name: Renombrar la camara a RolCam
+        shell: pwsh
+        run: |
+          $f = 'softcam/src/softcam/softcam.cpp'
+          $t = Get-Content $f -Raw
+          $t = $t.Replace('L"DirectShow Softcam"', 'L"RolCam"')
+          $t = $t.Replace('0xaef3b972, 0x5fa5, 0x4647, 0x95, 0x71, 0x35, 0x8e, 0xb4, 0x72, 0xbc, 0x9e', '0x60d404c1, 0x791e, 0x4534, 0x82, 0xaa, 0xa1, 0x9a, 0xde, 0xa2, 0x9f, 0xbc')
+          if ($t -notmatch 'L"RolCam"' -or $t -notmatch '0x60d404c1') { throw 'No se pudo renombrar la camara (cambio softcam.cpp)' }
+          Set-Content $f $t -NoNewline
+          $f = 'softcam/src/softcamcore/FrameBuffer.cpp'
+          $t = (Get-Content $f -Raw).Replace('"DirectShow Softcam/', '"RolCam/')
+          if ($t -notmatch '"RolCam/NamedMutex"') { throw 'No se pudo renombrar la memoria compartida (cambio FrameBuffer.cpp)' }
+          Set-Content $f $t -NoNewline
+
+      - uses: microsoft/setup-msbuild@v2
+
+      - name: Restaurar paquetes
+        run: nuget restore softcam/softcam.sln
+
+      - name: Compilar Softcam (64 y 32 bits)
+        run: |
+          msbuild /m /p:Configuration=Release /p:Platform=x64 softcam/softcam.sln
+          msbuild /m /p:Configuration=Release /p:Platform=Win32 softcam/softcam.sln
+
+      - name: Compilar el instalador de Softcam (64 y 32 bits)
+        run: |
+          msbuild /m /p:Configuration=Release /p:Platform=x64 softcam/examples/softcam_installer/softcam_installer.sln
+          msbuild /m /p:Configuration=Release /p:Platform=Win32 softcam/examples/softcam_installer/softcam_installer.sln
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Compilar rolcam-camara.exe
+        shell: cmd
+        run: cl /nologo /O2 /EHsc /MT /W3 nativo\rolcam-camara.cpp /I softcam\dist\include /Fe:rolcam-camara.exe /link softcam\dist\lib\x64\softcam.lib
+
+      - name: Armar el paquete
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force paquete/x64, paquete/x86 | Out-Null
+          Copy-Item rolcam-camara.exe paquete/x64/
+          Copy-Item softcam/dist/bin/x64/softcam.dll paquete/x64/
+          Copy-Item softcam/examples/softcam_installer/x64/Release/softcam_installer.exe paquete/x64/
+          Copy-Item softcam/dist/bin/Win32/softcam.dll paquete/x86/
+          Copy-Item softcam/examples/softcam_installer/Win32/Release/softcam_installer.exe paquete/x86/
+          Copy-Item softcam/LICENSE paquete/LICENCIA-Softcam.txt
+          Get-ChildItem -Recurse paquete | Select-Object FullName, Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rolcam-camara
+          path: paquete

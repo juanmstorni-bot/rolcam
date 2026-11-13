@@ -1,11 +1,10 @@
-# RolCam (nombre provisional)
+# RolCam
 
 Programa de escritorio para jugar rol online con cámara: sigue tu cuerpo, cara y manos
 con la webcam y muestra en tu lugar a tu personaje 3D. Software libre, licencia GPL-3.0.
 
-Estado: **Fase 1, primer paso.** La app muestra el personaje y lo anima. La salida a
-Discord se hace por ahora capturando la ventana con OBS (ver más abajo); la cámara
-virtual propia viene después.
+Estado: **en desarrollo.** La app anima personajes VRM, GLB y FBX, o una ilustración,
+y los emite por su propia cámara virtual.
 
 ## Requisitos
 
@@ -68,7 +67,26 @@ La app recuerda tu personaje, tu fondo y tus ajustes. Se guardan en
 En el panel se ven los fps de dibujo y de seguimiento. Los mensajes de error de las dos
 ventanas aparecen en la terminal donde corriste `npm start`.
 
-## Salida a Discord con OBS (puente temporal)
+## Cámara virtual propia
+
+RolCam trae su propia cámara virtual, para no depender de OBS. Aparece en Discord y otras
+apps con el nombre **RolCam**.
+
+El componente nativo se compila solo en GitHub (pestaña **Actions**, flujo "Camara virtual"):
+
+1. En GitHub, abrí la última ejecución de "Camara virtual" y descargá el archivo
+   **rolcam-camara** (sección Artifacts).
+2. Descomprimilo dentro de `nativo/bin`, de modo que exista
+   `nativo/bin/x64/rolcam-camara.exe`.
+3. Abrí RolCam y tocá **Instalar cámara virtual en Windows** (una sola vez; Windows pide
+   permiso de administrador).
+4. Tocá **Iniciar cámara virtual** y elegí la cámara "RolCam" en Discord. Si Discord ya
+   estaba abierto, reinicialo.
+
+Si movés la carpeta del programa, hay que instalar la cámara de nuevo: Windows guarda la
+ubicación del componente. El panel de controles nunca sale en la cámara.
+
+## Salida a Discord con OBS (alternativa)
 
 1. Instalá [OBS Studio](https://obsproject.com).
 2. En OBS: Fuentes > **+** > **Captura de ventana** > elegí "RolCam — Escenario".
@@ -87,6 +105,8 @@ ventanas aparecen en la terminal donde corriste `npm start`.
 | `src/importar.js` | Importa modelos `.glb` / `.fbx`: reconoce los huesos y arma el esqueleto normalizado |
 | `src/titere2d.js` | Personaje ilustrado 2.5D a partir de una imagen |
 | `src/seguimiento.*` | Ventana oculta: abre la webcam y corre MediaPipe en un proceso aparte |
+| `nativo/rolcam-camara.cpp` | Programa auxiliar que pasa los cuadros a la cámara virtual |
+| `.github/workflows/camara-virtual.yml` | Compila la cámara virtual en GitHub |
 | `scripts/descargar-recursos.js` | Baja los modelos y el personaje de ejemplo a `recursos/` |
 
 El seguimiento corre en un proceso separado del dibujo. Por eso el personaje se dibuja
@@ -99,3 +119,4 @@ fluido aunque el seguimiento vaya a pocos cuadros por segundo.
 - [@pixiv/three-vrm](https://github.com/pixiv/three-vrm) — MIT
 - [Kalidokit](https://github.com/yeemachine/kalidokit) — MIT (cara y dedos)
 - [Electron](https://github.com/electron/electron) — MIT
+- [Softcam](https://github.com/tshino/softcam) — MIT (cámara virtual)

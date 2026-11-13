@@ -6,6 +6,7 @@ const { app, BrowserWindow, ipcMain, protocol, net, session } = require('electro
 const path = require('node:path');
 const fs = require('node:fs');
 const { pathToFileURL } = require('node:url');
+const { spawn } = require('node:child_process');
 
 const RAIZ = __dirname;
 const PRUEBA = process.env.ROLCAM_PRUEBA === '1';   // prueba automática sin cámara real
@@ -90,6 +91,84 @@ app.whenReady().then(() => {
   ipcMain.on('cuadro', (_e, datos) => { if (escenario && !escenario.isDestroyed()) escenario.webContents.send('cuadro', datos); });
   ipcMain.on('estado', (_e, datos) => { if (escenario && !escenario.isDestroyed()) escenario.webContents.send('estado', datos); });
   ipcMain.on('control', (_e, datos) => { if (seguimiento && !seguimiento.isDestroyed()) seguimiento.webContents.send('control', datos); });
+
+  // ---------- Cámara virtual ----------
+  // El escenario manda cada cuadro (RGBA); acá se reenvía al programa auxiliar
+  // nativo/bin/x64/rolcam-camara.exe, que alimenta la cámara virtual "RolCam".
+  const BIN = path.join(RAIZ, 'nativo', 'bin');
+  const FALSA = process.env.ROLCAM_CAMARA_FALSA || '';      // solo para pruebas automáticas
+  let camara = null, camaraLlena = false, bytesPorCuadro = 0;
+  const avisarCamara = (activa, texto) => { if (escenario && !escenario.isDestroyed()) escenario.webContents.send('camara-estado', { activa, texto }); };
+
+  function detenerCamara(texto = 'Cámara virtual apagada.') {
+    if (camara && camara.proceso) { try { camara.proceso.stdin.end(); } catch {} }
+    camara = null; camaraLlena = false;
+    avisarCamara(false, texto);
+  }
+
+  function iniciarCamara(ancho, alto) {
+    if (camara) return;
+    ancho = Number(ancho) || 1280; alto = Number(alto) || 720;
+    bytesPorCuadro = ancho * alto * 4;
+    if (FALSA) { camara = { falsa: true, cuadros: 0, ancho, alto }; avisarCamara(true, 'Cámara virtual de prueba activa.'); return; }
+    if (process.platform !== 'win32') { avisarCamara(false, 'La cámara virtual solo funciona en Windows.'); return; }
+    const exe = path.join(BIN, 'x64', 'rolcam-camara.exe');
+    if (!fs.existsSync(exe)) { avisarCamara(false, 'Falta el componente de cámara virtual (carpeta nativo/bin). Mirá el README.'); return; }
+    const proceso = spawn(exe, [String(ancho), String(alto)], { cwd: path.dirname(exe), stdio: ['pipe', 'ignore', 'pipe'], windowsHide: true });
+    camara = { proceso };
+    let error = '';
+    proceso.stderr.on('data', (d) => {
+      const t = String(d);
+      if (t.includes('LISTO')) avisarCamara(true, 'Cámara virtual activa. En Discord elegí la cámara "RolCam".');
+      if (t.includes('ERROR ocupada')) error = 'La cámara virtual ya está en uso por otra ventana de RolCam.';
+      if (t.includes('ERROR tamano')) error = 'Tamaño de cámara no válido.';
+    });
+    proceso.stdin.on('drain', () => { camaraLlena = false; });
+    proceso.stdin.on('error', () => {});
+    proceso.on('error', (e) => { camara = null; avisarCamara(false, 'No se pudo iniciar la cámara virtual: ' + e.message); });
+    proceso.on('exit', (codigo) => {
+      if (camara && camara.proceso === proceso) camara = null;
+      avisarCamara(false, error || (codigo ? 'La cámara virtual se cerró. ¿Está instalada en Windows? Usá "Instalar cámara virtual".' : 'Cámara virtual apagada.'));
+    });
+  }
+
+  // Registra (o quita) la cámara en Windows. El instalador de Softcam pide permiso de administrador.
+  function registrarCamara(accion) {
+    if (process.platform !== 'win32') { avisarCamara(false, 'La cámara virtual solo funciona en Windows.'); return; }
+    let hechos = 0;
+    for (const arq of ['x64', 'x86']) {
+      const instalador = path.join(BIN, arq, 'softcam_installer.exe'), dll = path.join(BIN, arq, 'softcam.dll');
+      if (!fs.existsSync(instalador) || !fs.existsSync(dll)) continue;
+      spawn(instalador, [accion, dll], { cwd: path.dirname(instalador), detached: true, stdio: 'ignore' }).on('error', () => {}).unref();
+      hechos++;
+    }
+    avisarCamara(false, hechos ? 'Aceptá los permisos que pide Windows. Después reiniciá Discord para que vea la cámara.'
+      : 'Falta el componente de cámara virtual (carpeta nativo/bin). Mirá el README.');
+  }
+
+  ipcMain.on('camara', (_e, msg) => {
+    if (!msg) return;
+    if (msg.tipo === 'iniciar') iniciarCamara(msg.ancho, msg.alto);
+    else if (msg.tipo === 'detener') detenerCamara();
+    else if (msg.tipo === 'instalar') registrarCamara('register');
+    else if (msg.tipo === 'desinstalar') { detenerCamara(); registrarCamara('unregister'); }
+  });
+  ipcMain.on('camara-cuadro', (_e, datos) => {
+    if (!camara || !datos || datos.byteLength !== bytesPorCuadro) return;
+    if (camara.falsa) {
+      // Prueba: guarda el quinto cuadro como imagen PPM para poder mirarlo.
+      if (++camara.cuadros === 5) {
+        const rgb = Buffer.alloc(camara.ancho * camara.alto * 3);
+        for (let i = 0, j = 0; i < datos.length; i += 4) { rgb[j++] = datos[i]; rgb[j++] = datos[i + 1]; rgb[j++] = datos[i + 2]; }
+        fs.writeFileSync(FALSA, Buffer.concat([Buffer.from('P6\n' + camara.ancho + ' ' + camara.alto + '\n255\n'), rgb]));
+        console.log('Cámara de prueba: cuadro guardado');
+      }
+      return;
+    }
+    if (camaraLlena || !camara.proceso) return;     // si el auxiliar va atrasado, se saltea el cuadro
+    camaraLlena = !camara.proceso.stdin.write(Buffer.from(datos.buffer, datos.byteOffset, datos.byteLength));
+  });
+  app.on('before-quit', () => { if (camara && camara.proceso) { try { camara.proceso.stdin.end(); } catch {} } });
 
   // Ajustes y archivos del usuario.
   ipcMain.handle('leer-ajustes', () => leerAjustes());

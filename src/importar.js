@@ -100,6 +100,67 @@ function mapearHuesos(raiz) {
 
 const posMundo = (o) => o.getWorldPosition(new THREE.Vector3());
 
+// Muchos modelos (sobre todo los que vienen de juegos) traen huesos "sueltos" para el arma,
+// el escudo o accesorios, colgados de la raíz en lugar de la mano. Si se dejan así, la mano
+// se mueve y el arma queda en su lugar, y la malla se estira entre los dos. Acá se engancha
+// cada hueso u objeto suelto al hueso del cuerpo más cercano a la parte de la malla que mueve.
+function reengancharSueltos(modelo, mapa) {
+  const mapeados = new Set(Object.values(mapa));
+  const ancestros = new Set();
+  for (const n of mapeados) { let p = n.parent; while (p) { ancestros.add(p); p = p.parent; } }
+  const esSuelto = (o) => {
+    if (o === modelo || mapeados.has(o) || ancestros.has(o)) return false;
+    if (!(o.isBone || (o.isMesh && !o.isSkinnedMesh))) return false;
+    for (let p = o.parent; p; p = p.parent) if (mapeados.has(p)) return false;   // ya cuelga del cuerpo
+    return true;
+  };
+  const sueltos = [];
+  modelo.traverse((o) => {
+    if (!esSuelto(o)) return;
+    for (let p = o.parent; p && p !== modelo; p = p.parent) if (esSuelto(p)) return;   // lo arrastra su padre
+    sueltos.push(o);
+  });
+  if (!sueltos.length) return [];
+
+  const mallas = [];
+  modelo.traverse((o) => { if (o.isSkinnedMesh) mallas.push(o); });
+  const v = new THREE.Vector3();
+  const informe = [];
+  for (const suelto of sueltos) {
+    // Centro de la parte de la malla que depende de este hueso (o del objeto, si no es hueso).
+    const centro = new THREE.Vector3();
+    let cuenta = 0;
+    if (suelto.isBone) {
+      const familia = new Set();
+      suelto.traverse((h) => familia.add(h));
+      for (const malla of mallas) {
+        const indices = new Set();
+        malla.skeleton.bones.forEach((h, i) => { if (familia.has(h)) indices.add(i); });
+        const pos = malla.geometry.attributes.position, si = malla.geometry.attributes.skinIndex, sw = malla.geometry.attributes.skinWeight;
+        if (!indices.size || !pos || !si || !sw) continue;
+        for (let i = 0; i < pos.count; i++) {
+          let peso = 0;
+          if (indices.has(si.getX(i))) peso += sw.getX(i);
+          if (indices.has(si.getY(i))) peso += sw.getY(i);
+          if (indices.has(si.getZ(i))) peso += sw.getZ(i);
+          if (indices.has(si.getW(i))) peso += sw.getW(i);
+          if (peso > 0.5) { centro.add(v.fromBufferAttribute(pos, i).applyMatrix4(malla.matrixWorld)); cuenta++; }
+        }
+      }
+    } else {
+      new THREE.Box3().setFromObject(suelto).getCenter(centro); cuenta = 1;
+    }
+    if (cuenta) centro.divideScalar(suelto.isBone ? cuenta : 1); else centro.copy(posMundo(suelto));
+    let mejor = null, distancia = Infinity;
+    for (const [nombre, nodo] of Object.entries(mapa)) {
+      const d = posMundo(nodo).distanceToSquared(centro);
+      if (d < distancia) { distancia = d; mejor = [nombre, nodo]; }
+    }
+    if (mejor) { mejor[1].attach(suelto); informe.push((suelto.name || '(sin nombre)') + ' -> ' + mejor[0]); }
+  }
+  return informe;
+}
+
 // Gira un hueso para que el tramo hacia su hijo apunte en la dirección pedida (en el mundo).
 function apuntar(hueso, hijo, direccion) {
   if (!hueso || !hijo) return;
@@ -132,10 +193,19 @@ export async function cargarModeloGenerico(url, formato) {
   const necesarios = ['hips', 'head', 'leftUpperArm', 'leftLowerArm', 'rightUpperArm', 'rightLowerArm'];
   const faltan = necesarios.filter((h) => !mapa[h]);
   if (faltan.length) {
+    // Lista de nombres a la terminal: sirve para ampliar el reconocimiento.
+    const nombres = [];
+    modelo.traverse((o) => { if (o.isBone) nombres.push(o.name); });
+    console.log('HUESOS DEL MODELO (' + nombres.length + '): ' + nombres.slice(0, 200).join(' | '));
     const error = new Error('No se reconoció el esqueleto del modelo (faltan: ' + faltan.join(', ') + ').');
     error.faltan = faltan;
     throw error;
   }
+
+  const enganchados = reengancharSueltos(modelo, mapa);
+  console.log('Huesos reconocidos: ' + Object.entries(mapa).map(([k, n]) => k + '=' + n.name).join(', '));
+  if (enganchados.length) console.log('Piezas sueltas enganchadas al cuerpo: ' + enganchados.join('; '));
+  envoltorio.updateMatrixWorld(true);
 
   // 1. Que mire a la cámara: el hombro izquierdo del personaje tiene que quedar hacia +X.
   const entreHombros = posMundo(mapa.leftUpperArm).sub(posMundo(mapa.rightUpperArm));
@@ -173,7 +243,7 @@ export async function cargarModeloGenerico(url, formato) {
     expressionManager: null,                 // estos modelos no traen expresiones faciales
     meta: { metaVersion: '1' },              // queda mirando a +Z, como un VRM 1.0
     update() { humanoid.update(); },
-    informe: { reconocidos: Object.keys(mapa).length, conDedos: Object.keys(mapa).some((h) => /Index|Thumb/.test(h)) },
+    informe: { enganchados: enganchados.length, reconocidos: Object.keys(mapa).length, conDedos: Object.keys(mapa).some((h) => /Index|Thumb/.test(h)) },
   };
 }
 
