@@ -12,6 +12,10 @@ on:
 env:
   SOFTCAM_COMMIT: d1acde4617782f87a3929d7a7528fa3e524ec56b
 
+# Permiso para publicar la versión en la sección Releases del repositorio.
+permissions:
+  contents: write
+
 jobs:
   instalador:
     runs-on: windows-latest
@@ -94,3 +98,14 @@ jobs:
         with:
           name: rolcam-instalador
           path: dist/*.exe
+
+      # Solo al subir una etiqueta (por ejemplo v1.0.0): publica el instalador en la
+      # sección Releases, donde cualquiera puede descargarlo sin iniciar sesión.
+      - name: Publicar la version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $instalador = (Get-ChildItem dist/*.exe | Select-Object -First 1).FullName
+          gh release create $env:GITHUB_REF_NAME $instalador --title "RolCam $env:GITHUB_REF_NAME" --generate-notes
