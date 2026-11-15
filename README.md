@@ -12,8 +12,9 @@ Descargá el instalador `RolCam Setup` desde el repositorio (pestaña Actions, f
 "Instalador", sección Artifacts) y ejecutalo. Windows puede mostrar una advertencia
 porque el instalador todavía no tiene firma digital.
 
-La primera vez, dentro de RolCam, tocá **Instalar cámara virtual en Windows**. Antes de
-desinstalar RolCam, tocá **Desinstalar cámara virtual**.
+El instalador pide permiso de administrador porque registra la cámara virtual "RolCam"
+en Windows; al desinstalar el programa, la quita. Si la cámara no aparece en Discord,
+dentro de RolCam está el botón **Instalar cámara virtual en Windows** para repetirlo a mano.
 
 Lo que sigue en este archivo es para quien quiera modificar el programa.
 

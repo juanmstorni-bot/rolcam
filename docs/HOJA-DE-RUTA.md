@@ -45,8 +45,9 @@ Decisiones de diseño que conviene respetar:
 
 1. **Pruebas en una PC con placa dedicada.** Medir fps de dibujo y seguimiento; revisar
    espada/escudo en modelos de juegos (huesos sueltos) y el regreso de los brazos al reposo.
-2. **Instalador más cómodo.** Registrar la cámara virtual durante la instalación y
-   quitarla al desinstalar (hoy se hace con los botones del panel). Firma digital.
+2. **Firma digital del instalador.** Desde la 1.1.0 el instalador registra la cámara
+   virtual al instalar y la quita al desinstalar (`instalador/camara.nsh`); falta la
+   firma para evitar el aviso de "editor desconocido" de Windows.
 3. **Panel del Dungeon Master.** Requiere una "sala": las apps de la mesa conectadas por
    un código. El DM cambia el fondo de todos y dispara sonidos que suenan en la app de
    cada jugador. Decisión abierta: conexión directa entre jugadores (WebRTC, sin
