@@ -1,0 +1,96 @@
+# Arma el instalador de RolCam para Windows en los servidores de GitHub:
+# compila la cámara virtual, baja librerías y modelos, y empaqueta todo en un .exe.
+# Se ejecuta a mano (pestaña Actions > Instalador > Run workflow) o al subir una etiqueta v*.
+name: Instalador
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  SOFTCAM_COMMIT: d1acde4617782f87a3929d7a7528fa3e524ec56b
+
+jobs:
+  instalador:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ---- Cámara virtual (igual que en camara-virtual.yml) ----
+      - name: Bajar Softcam
+        shell: pwsh
+        run: |
+          git clone https://github.com/tshino/softcam softcam
+          git -C softcam checkout $env:SOFTCAM_COMMIT
+
+      - name: Renombrar la camara a RolCam
+        shell: pwsh
+        run: |
+          $f = 'softcam/src/softcam/softcam.cpp'
+          $t = Get-Content $f -Raw
+          $t = $t.Replace('L"DirectShow Softcam"', 'L"RolCam"')
+          $t = $t.Replace('0xaef3b972, 0x5fa5, 0x4647, 0x95, 0x71, 0x35, 0x8e, 0xb4, 0x72, 0xbc, 0x9e', '0x60d404c1, 0x791e, 0x4534, 0x82, 0xaa, 0xa1, 0x9a, 0xde, 0xa2, 0x9f, 0xbc')
+          if ($t -notmatch 'L"RolCam"' -or $t -notmatch '0x60d404c1') { throw 'No se pudo renombrar la camara (cambio softcam.cpp)' }
+          Set-Content $f $t -NoNewline
+          $f = 'softcam/src/softcamcore/FrameBuffer.cpp'
+          $t = (Get-Content $f -Raw).Replace('"DirectShow Softcam/', '"RolCam/')
+          if ($t -notmatch '"RolCam/NamedMutex"') { throw 'No se pudo renombrar la memoria compartida (cambio FrameBuffer.cpp)' }
+          Set-Content $f $t -NoNewline
+
+      - uses: microsoft/setup-msbuild@v2
+
+      - name: Restaurar paquetes
+        run: nuget restore softcam/softcam.sln
+
+      - name: Compilar Softcam y su instalador (64 y 32 bits)
+        run: |
+          msbuild /m /p:Configuration=Release /p:Platform=x64 softcam/softcam.sln
+          msbuild /m /p:Configuration=Release /p:Platform=Win32 softcam/softcam.sln
+          msbuild /m /p:Configuration=Release /p:Platform=x64 softcam/examples/softcam_installer/softcam_installer.sln
+          msbuild /m /p:Configuration=Release /p:Platform=Win32 softcam/examples/softcam_installer/softcam_installer.sln
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Compilar rolcam-camara.exe
+        shell: cmd
+        run: cl /nologo /O2 /EHsc /MT /W3 nativo\rolcam-camara.cpp /I softcam\dist\include /Fe:rolcam-camara.exe /link softcam\dist\lib\x64\softcam.lib
+
+      - name: Poner la camara dentro de la app
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force nativo/bin/x64, nativo/bin/x86 | Out-Null
+          Copy-Item rolcam-camara.exe nativo/bin/x64/
+          Copy-Item softcam/dist/bin/x64/softcam.dll nativo/bin/x64/
+          Copy-Item softcam/examples/softcam_installer/x64/Release/softcam_installer.exe nativo/bin/x64/
+          Copy-Item softcam/dist/bin/Win32/softcam.dll nativo/bin/x86/
+          Copy-Item softcam/examples/softcam_installer/Win32/Release/softcam_installer.exe nativo/bin/x86/
+          Copy-Item softcam/LICENSE nativo/bin/LICENCIA-Softcam.txt
+          # La carpeta de Softcam ya no hace falta y no debe entrar en el instalador.
+          Remove-Item -Recurse -Force softcam, rolcam-camara.exe, *.obj -ErrorAction SilentlyContinue
+
+      # ---- Aplicación ----
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Instalar dependencias y recursos
+        run: npm install
+
+      - name: Comprobar recursos
+        shell: pwsh
+        run: |
+          foreach ($f in 'recursos/holistic_landmarker.task','recursos/pose_landmarker_lite.task','recursos/face_landmarker.task','recursos/muestra.vrm','src/vendor/three-addons/loaders/GLTFLoader.js','nativo/bin/x64/rolcam-camara.exe') {
+            if (-not (Test-Path $f)) { throw "Falta $f" }
+          }
+
+      - name: Armar el instalador
+        run: npx --yes electron-builder@26 --win nsis --publish never
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rolcam-instalador
+          path: dist/*.exe

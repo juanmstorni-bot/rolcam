@@ -1,13 +1,14 @@
 {
   "name": "rolcam",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Avatar de personaje por cámara para partidas de rol online",
   "main": "main.js",
   "license": "GPL-3.0-or-later",
   "scripts": {
     "start": "electron .",
     "recursos": "node scripts/descargar-recursos.js",
-    "postinstall": "node scripts/descargar-recursos.js"
+    "postinstall": "node scripts/copiar-librerias.js && node scripts/descargar-recursos.js",
+    "instalador": "electron-builder --win nsis --publish never"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "1.2.2",
@@ -17,5 +18,36 @@
   },
   "devDependencies": {
     "electron": "^45.3.0"
+  },
+  "author": "juanmstorni-bot",
+  "build": {
+    "appId": "io.github.juanmstorni-bot.rolcam",
+    "productName": "RolCam",
+    "asar": false,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*",
+      "!nativo/*.cpp",
+      "!nativo/*.yml",
+      "!scripts",
+      "!.github",
+      "!docs",
+      "!dist",
+      "!_*"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "RolCam"
+    },
+    "linux": {
+      "target": "dir"
+    }
   }
 }

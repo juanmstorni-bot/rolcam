@@ -2,3 +2,4 @@ node_modules/
 recursos/
 dist/
 nativo/bin/
+src/vendor/

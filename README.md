@@ -6,6 +6,17 @@ con la webcam y muestra en tu lugar a tu personaje 3D. Software libre, licencia 
 Estado: **en desarrollo.** La app anima personajes VRM, GLB y FBX, o una ilustración,
 y los emite por su propia cámara virtual.
 
+## Instalar (para usar el programa)
+
+Descargá el instalador `RolCam Setup` desde el repositorio (pestaña Actions, flujo
+"Instalador", sección Artifacts) y ejecutalo. Windows puede mostrar una advertencia
+porque el instalador todavía no tiene firma digital.
+
+La primera vez, dentro de RolCam, tocá **Instalar cámara virtual en Windows**. Antes de
+desinstalar RolCam, tocá **Desinstalar cámara virtual**.
+
+Lo que sigue en este archivo es para quien quiera modificar el programa.
+
 ## Requisitos
 
 - Windows 10 u 11 de 64 bits
@@ -120,3 +131,6 @@ fluido aunque el seguimiento vaya a pocos cuadros por segundo.
 - [Kalidokit](https://github.com/yeemachine/kalidokit) — MIT (cara y dedos)
 - [Electron](https://github.com/electron/electron) — MIT
 - [Softcam](https://github.com/tshino/softcam) — MIT (cámara virtual)
+- Personaje de ejemplo: VRM1_Constraint_Twist_Sample, (c) 2022 pixiv Inc., redistribuible según su licencia VRM
+
+El estado del proyecto y lo que falta están en [docs/HOJA-DE-RUTA.md](docs/HOJA-DE-RUTA.md).
