@@ -132,18 +132,40 @@ app.whenReady().then(() => {
     });
   }
 
-  // Registra (o quita) la cámara en Windows. El instalador de Softcam pide permiso de administrador.
-  function registrarCamara(accion) {
+  // Registra (o quita) la cámara en Windows. El instalador de Softcam necesita permisos de
+  // administrador, así que se lanza "elevado" con PowerShell (aparece el aviso de Windows).
+  function ejecutarElevado(exe, argumentos) {
+    return new Promise((resolver) => {
+      const comilla = (t) => "'" + String(t).replace(/'/g, "''") + "'";
+      const lista = argumentos.map((a) => comilla('"' + a + '"')).join(',');
+      const orden = 'Start-Process -FilePath ' + comilla(exe) + ' -ArgumentList ' + lista + ' -Verb RunAs -Wait';
+      const ps = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', orden], { windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] });
+      let error = '';
+      ps.stderr.on('data', (d) => { error += String(d); });
+      ps.on('error', (e) => resolver(e.message));
+      ps.on('exit', (codigo) => resolver(codigo === 0 && !error ? null : (error.trim() || 'código ' + codigo)));
+    });
+  }
+  async function registrarCamara(accion) {
     if (process.platform !== 'win32') { avisarCamara(false, 'La cámara virtual solo funciona en Windows.'); return; }
-    let hechos = 0;
+    const pasos = [];
     for (const arq of ['x64', 'x86']) {
       const instalador = path.join(BIN, arq, 'softcam_installer.exe'), dll = path.join(BIN, arq, 'softcam.dll');
-      if (!fs.existsSync(instalador) || !fs.existsSync(dll)) continue;
-      spawn(instalador, [accion, dll], { cwd: path.dirname(instalador), detached: true, stdio: 'ignore' }).on('error', () => {}).unref();
-      hechos++;
+      if (fs.existsSync(instalador) && fs.existsSync(dll)) pasos.push([instalador, dll]);
     }
-    avisarCamara(false, hechos ? 'Aceptá los permisos que pide Windows. Después reiniciá Discord para que vea la cámara.'
-      : 'Falta el componente de cámara virtual (carpeta nativo/bin). Mirá el README.');
+    if (!pasos.length) { avisarCamara(false, 'Falta el componente de cámara virtual (carpeta nativo/bin). Mirá el README.'); return; }
+    avisarCamara(false, 'Aceptá el permiso de administrador que pide Windows (dos veces) y los carteles de confirmación…');
+    for (const [instalador, dll] of pasos) {
+      const error = await ejecutarElevado(instalador, [accion, dll]);
+      if (error) {
+        console.error('Instalador de cámara: ' + error);
+        avisarCamara(false, 'No se completó. Si cancelaste el permiso de Windows, volvé a intentarlo.');
+        return;
+      }
+    }
+    avisarCamara(false, accion === 'register'
+      ? 'Cámara instalada. Tocá "Iniciar cámara virtual" y reiniciá Discord para que la vea.'
+      : 'Cámara desinstalada.');
   }
 
   ipcMain.on('camara', (_e, msg) => {
