@@ -435,7 +435,7 @@ $('modo').addEventListener('change', () => {
   if ($('iniciar').disabled) pedirInicio();
 });
 $('pausa').addEventListener('change', (e) => puente.enviar('control', { tipo: 'pausa', valor: e.target.checked }));
-$('fondo').addEventListener('input', (e) => { if (!texturaFondo) escena.background = new THREE.Color(e.target.value); guardar(); });
+$('fondo').addEventListener('input', (e) => { if (!texturaFondo) escena.background = new THREE.Color(e.target.value); guardar(); actualizarVistaFondo(); });
 for (const id of ['temblor', 'suavizado', 'modo']) $(id).addEventListener('change', () => guardar());
 
 // ---------- Ajustes que se recuerdan entre sesiones ----------
@@ -567,10 +567,15 @@ $('elegirFondo').addEventListener('click', () => { const a = cerrarPregunta(); i
 $('elegirCancelar').addEventListener('click', cerrarPregunta);
 async function usarFondo(archivo) {
   ponerFondoImagen(URL.createObjectURL(archivo));
-  if (await conservarArchivo('fondo', archivo)) guardar({ fondoImagen: archivo.name });
+  if (await conservarArchivo('fondo', archivo)) {
+    guardar({ fondoImagen: archivo.name });
+    versionVistaFondo++; actualizarVistaFondo();
+    // Desde la mesa del DM, cambiar el fondo lo cambia para todos de una.
+    if (vistaMesa() && sala.conectada && sala.soyDM) sala.fijarMesa((m) => ({ ...m, fondo: { tipo: 'imagen', v: Date.now() } }));
+  }
 }
 $('fondoImagen').addEventListener('change', (e) => { if (e.target.files[0]) usarFondo(e.target.files[0]); });
-$('quitarFondo').addEventListener('click', () => { quitarFondoImagen(); $('fondoImagen').value = ''; guardar({ fondoImagen: null }); });
+$('quitarFondo').addEventListener('click', () => { quitarFondoImagen(); $('fondoImagen').value = ''; guardar({ fondoImagen: null }); actualizarVistaFondo(); });
 $('personajeEjemplo').addEventListener('click', () => { cargarVRM('/recursos/muestra.vrm', 'personaje de ejemplo'); guardar({ tipoPersonaje: 'vrm', personaje: null }); });
 window.addEventListener('keydown', (e) => {
   // No cuenta mientras se escribe en una casilla (un nombre con "h" escondía el panel).
@@ -732,13 +737,57 @@ const rolActual = () => (document.body.classList.contains('rol-jugador') ? 'juga
 const aBytes = (d) => (d instanceof Uint8Array ? d : new Uint8Array(d instanceof ArrayBuffer ? d : d.buffer));
 let versionFondoSala = null, fondoDeSala = false, sonandoDeSala = new Set(), ultimaMesa = MESA_VACIA;
 
+// ---------- Vista en vivo de los personajes (para el Dungeon Master) ----------
+// Cada jugador manda al DM un video chico (320 × 180, 10 cuadros por segundo) de su escenario
+// ya dibujado: el personaje sobre el fondo. Es liviano a propósito, para no cargar ni la PC
+// del jugador ni la del DM. La cámara real nunca se envía.
+let miniatura = null;                       // jugador: { lienzo, ctx, stream, ultimo }
+const videosDeSala = new Map();             // DM: userId -> <video>
+function empezarMiniatura() {
+  terminarMiniatura();
+  const lienzo = document.createElement('canvas');
+  lienzo.width = 320; lienzo.height = 180;
+  miniatura = { lienzo, ctx: lienzo.getContext('2d'), stream: lienzo.captureStream(10), ultimo: 0 };
+  sala.compartirVista(miniatura.stream);
+}
+function terminarMiniatura() {
+  if (miniatura) for (const pista of miniatura.stream.getTracks()) pista.stop();
+  miniatura = null;
+}
+function dibujarMiniatura(ahora) {
+  if (!miniatura || ahora - miniatura.ultimo < 95) return;
+  miniatura.ultimo = ahora;
+  const origen = renderer.domElement, W = 320, H = 180, aOrigen = origen.width / origen.height, aDestino = W / H;
+  let sx = 0, sy = 0, sw = origen.width, sh = origen.height;
+  if (aOrigen > aDestino) { sw = origen.height * aDestino; sx = (origen.width - sw) / 2; }
+  else { sh = origen.width / aDestino; sy = (origen.height - sh) / 2; }
+  miniatura.ctx.drawImage(origen, sx, sy, sw, sh, 0, 0, W, H);
+}
+function actualizarVideosDeSala() {
+  for (const [id, video] of [...videosDeSala]) if (!sala.vistas.has(id)) { video.srcObject = null; videosDeSala.delete(id); }
+  for (const [id, stream] of sala.vistas) {
+    let video = videosDeSala.get(id);
+    if (!video) {
+      video = document.createElement('video');
+      video.muted = true; video.autoplay = true; video.playsInline = true;
+      video.title = 'Tocá para agrandar o achicar';
+      video.addEventListener('click', () => { if (vistaMesa()) return; const era = video.classList.contains('grande'); for (const v of videosDeSala.values()) v.classList.remove('grande'); video.classList.toggle('grande', !era); });
+      videosDeSala.set(id, video);
+      if (puente.pruebaSala) { console.log('SALA vista recibida'); video.addEventListener('resize', () => console.log('SALA vista con imagen: ' + video.videoWidth + 'x' + video.videoHeight), { once: true }); }
+    }
+    if (video.srcObject !== stream) video.srcObject = stream;
+  }
+  if (!escribiendoEnLista()) pintarGente(sala.gente());
+}
+
 const sala = new Sala({
+  alCambiarVistas: actualizarVideosDeSala,
   alCambiarGente: (lista) => pintarGente(lista),
   alCambiarMesa: (mesa) => {
     ultimaMesa = mesa;
     if (!sala.soyDM) obedecerMesa(mesa);
     // Al DM se le refrescan las vidas (por ejemplo al reabrir la sala), salvo que esté escribiendo una.
-    else if (!$('salaGente').contains(document.activeElement)) pintarGente(sala.gente()); if (puente.pruebaSala) console.log('SALA mesa: ' + JSON.stringify(mesa)); },
+    else if (!escribiendoEnLista()) pintarGente(sala.gente()); if (puente.pruebaSala) console.log('SALA mesa: ' + JSON.stringify(mesa)); },
   alEfecto: (dato) => { if (!sala.soyDM) tocarEfectoDeSala(dato); if (puente.pruebaSala) console.log('SALA efecto: ' + JSON.stringify(dato)); },
   alError: (texto) => { $('salaEstado').textContent = 'Problema de conexión: ' + texto; },
 });
@@ -797,6 +846,7 @@ function obedecerMesa(mesa) {
 }
 
 function pintarGente(lista) {
+  if (vistaMesa()) pintarMesa(lista);
   const caja = $('salaGente');
   caja.textContent = '';
   if (!sala.conectada) return;
@@ -818,6 +868,11 @@ function pintarGente(lista) {
         sala.fijarMesa((m) => ({ ...m, vidas: { ...(m.vidas || {}), [p.userId]: v } }));
       };
       actual.addEventListener('change', fijar); max.addEventListener('change', fijar);
+      // El personaje en vivo, si ya llegó su video.
+      const video = vistaMesa() ? null : videosDeSala.get(p.userId);
+      if (vistaMesa()) { /* en la mesa, el video va en la carta */ }
+      else if (video) { fila.append(video); video.play().catch(() => {}); }
+      else { const espera = document.createElement('div'); espera.className = 'sinVista'; espera.textContent = 'Esperando la imagen del personaje…'; fila.append(espera); }
       fila.append('Vida ', actual, ' / ', max);
       // Sonidos de este personaje: los guarda el DM con el nombre del personaje, así vuelven
       // a aparecer en la próxima sesión. Suenan una vez, para toda la mesa.
@@ -855,6 +910,7 @@ function estadoDeSala(conectada) {
   $('salaCodigo').disabled = conectada;
   $('salaFondo').hidden = !(conectada && sala.soyDM);
   if (!conectada) { $('salaGente').textContent = ''; $('salaVida').hidden = true; $('hud').style.display = 'none'; }
+  if (vistaMesa()) pintarMesa(sala.gente());
 }
 
 async function entrarSala(codigo, opciones) {
@@ -879,6 +935,7 @@ async function entrarSala(codigo, opciones) {
       $('salaEstado').textContent = 'Sala abierta. Pasales este código a los jugadores: ' + codigo;
     } else {
       $('salaEstado').textContent = 'Conectada. Esperando al Dungeon Master…';
+      empezarMiniatura();       // el DM va a ver este personaje en vivo
     }
     estadoDeSala(true);
     pintarGente(sala.gente());
@@ -892,7 +949,9 @@ async function entrarSala(codigo, opciones) {
 }
 async function salirDeSala() {
   const eraJugador = !sala.soyDM;
+  terminarMiniatura();
   await sala.salir();
+  actualizarVideosDeSala();
   estadoDeSala(false);
   $('salaEstado').textContent = 'Sin conectar.';
   if (eraJugador) {
@@ -914,6 +973,156 @@ for (const id of ['salaJugador', 'salaPersonaje']) $(id).addEventListener('chang
   sala.actualizarPerfil({ jugador: $('salaJugador').value.trim(), personaje: $('salaPersonaje').value.trim() });
 });
 
+
+// ---------- Mesa del Dungeon Master ----------
+// La pantalla del DM no se parece a la del jugador: es una mesa redonda vista desde arriba y
+// de costado, con una carta por personaje sentada alrededor. El frente de la carta muestra al
+// personaje en vivo, su nombre, el del jugador, sus habilidades y su vida; al tocarla se da
+// vuelta y atrás están sus sonidos. El centro de la mesa muestra el fondo que ven todos, y
+// los sonidos viven en un cajón desplegable, abajo.
+const vistaMesa = () => document.body.classList.contains('vista-mesa');
+const cartasVolteadas = new Set();
+let versionVistaFondo = 0;
+function escribiendoEnLista() {
+  const a = document.activeElement;
+  return $('salaGente').contains(a) || ($('mesaAsientos').contains(a) && /^(INPUT|TEXTAREA)$/.test(a.tagName));
+}
+function fichaDe(personaje) {
+  const dm = datosDM();
+  if (!dm.fichas) dm.fichas = {};
+  return dm.fichas[personaje] || (dm.fichas[personaje] = { habilidades: '' });
+}
+function actualizarVistaFondo() {
+  const vista = $('mesaVista');
+  vista.style.backgroundColor = $('fondo').value;
+  vista.style.backgroundImage = ajustes.fondoImagen ? 'url("/usuario/fondo.img?v=' + versionVistaFondo + '")' : 'none';
+}
+// Tamaños y lugares: todo sale del espacio disponible, así la mesa entra en cualquier ventana.
+function medidasMesa(asientos) {
+  const e = $('mesaEscena'), w = e.clientWidth, h = e.clientHeight;
+  // Escala de las cartas: según la ventana, y más chicas cuando hay mucha gente (hasta 8 entran cómodos).
+  const k = Math.max(0.55, Math.min(1.3, h / 560, w / 1050)) * (asientos > 6 ? 0.74 : asientos > 4 ? 0.86 : 1);
+  const altoCarta = 214 * k, anchoCarta = 150 * k;
+  const Ry = Math.max(60, (h - altoCarta) / 2 - 10), Rx = Math.max(120, Math.min(w / 2 - anchoCarta / 2 - 14, Ry * 2.3));
+  const ry = Math.max(40, Ry - altoCarta * 0.36), rx = Math.max(90, Math.min(Rx - anchoCarta * 0.62, ry * 2.2));
+  return { cx: w / 2, cy: h / 2 - 6, k, Rx, Ry, rx, ry, asientos };
+}
+function acomodarMesa() {
+  if (!vistaMesa()) return;
+  const cartas = [...$('mesaAsientos').children], m = medidasMesa(cartas.length);
+  const poner = (id, dx, dy, ancho, alto) => { const s = $(id).style; s.left = (m.cx + dx) + 'px'; s.top = (m.cy + dy) + 'px'; s.width = ancho + 'px'; s.height = alto + 'px'; };
+  const canto = Math.round(20 * m.k);
+  poner('mesaSombra', 0, canto + m.ry * 0.55, m.rx * 2.5, m.ry * 1.5);
+  poner('mesaCanto', 0, canto, m.rx * 2, m.ry * 2);
+  poner('mesaTapa', 0, 0, m.rx * 2, m.ry * 2);
+  poner('mesaVista', 0, 0, m.rx * 1.56, m.ry * 1.5);
+  $('mesaCentro').style.left = m.cx + 'px'; $('mesaCentro').style.top = m.cy + 'px';
+  cartas.forEach((carta, i) => {
+    const a = -Math.PI / 2 + i * 2 * Math.PI / cartas.length, hondo = (Math.sin(a) + 1) / 2;       // 0 atrás, 1 adelante
+    const escala = m.k * (0.86 + 0.14 * hondo);
+    carta.style.left = (m.cx + Math.cos(a) * m.Rx - 75) + 'px';
+    carta.style.top = (m.cy + Math.sin(a) * m.Ry - 107) + 'px';
+    carta.style.transform = 'scale(' + escala.toFixed(3) + ')';
+    carta.style.zIndex = String(10 + Math.round(hondo * 20));
+  });
+}
+window.addEventListener('resize', acomodarMesa);
+
+function armarCarta(p) {
+  const personaje = p.personaje || p.jugador || 'Sin nombre', dm = datosDM(), ficha = fichaDe(personaje), editando = $('dmEditar').checked;
+  const vida = (ultimaMesa.vidas && ultimaMesa.vidas[p.userId]) || { actual: 10, max: 10 };
+  const crear = (etiqueta, clase, texto) => { const n = document.createElement(etiqueta); if (clase) n.className = clase; if (texto != null) n.textContent = texto; return n; };
+  const fijarVida = (actual, max) => {
+    const v = { actual: Math.max(0, Math.min(9999, Math.round(actual))), max: Math.max(1, Math.min(9999, Math.round(max))) };
+    sala.fijarMesa((mesa) => ({ ...mesa, vidas: { ...(mesa.vidas || {}), [p.userId]: v } }));
+  };
+  const carta = crear('div', 'carta' + (cartasVolteadas.has(p.userId) ? ' volteada' : '') + (vida.actual <= vida.max * 0.3 ? ' herida' : ''));
+  const giro = crear('div', 'cartaGiro'), frente = crear('div', 'cara frente'), dorso = crear('div', 'cara dorso');
+
+  // Frente: nombre, retrato en vivo, jugador y habilidades, vida.
+  const retrato = crear('div', 'retrato'), video = videosDeSala.get(p.userId);
+  if (video) { video.classList.remove('grande'); retrato.append(video); video.play().catch(() => {}); } else retrato.textContent = 'Esperando la imagen…';
+  const datos = crear('div', 'datos');
+  datos.append(crear('b', '', p.jugador || 'Sin nombre'), crear('span', '', ficha.habilidades || 'Sin habilidades anotadas'));
+  const filaVida = crear('div', 'vida'), menos = crear('button', '', '−'), mas = crear('button', '', '+');
+  menos.title = 'Quitar un punto de vida'; mas.title = 'Sumar un punto de vida';
+  menos.addEventListener('click', () => fijarVida(vida.actual - 1, vida.max));
+  mas.addEventListener('click', () => fijarVida(Math.min(vida.max, vida.actual + 1), vida.max));
+  filaVida.append(menos, crear('span', 'corazon', vida.actual + ' / ' + vida.max), mas);
+  frente.append(crear('div', 'cinta', personaje), retrato, datos, filaVida);
+
+  // Dorso: sonidos del personaje, habilidades y vida máxima.
+  const grilla = crear('div', 'grilla');
+  for (const son of dm.personajes[personaje] || []) {
+    const b = crear('button', editando ? 'quitar' : '', (editando ? '✕ ' : '') + son.nombre); b.title = son.nombre;
+    b.addEventListener('click', () => {
+      if ($('dmEditar').checked) {
+        sonidos.quitarPropio(clavePropio(son.n));
+        dm.personajes[personaje] = dm.personajes[personaje].filter((x) => x !== son);
+        guardar(); pintarGente(sala.gente());
+      } else { sonidos.ponerPropio(clavePropio(son.n), true, false); sala.enviarEfecto({ propio: son.n }); }
+    });
+    grilla.append(b);
+  }
+  if (!editando) {
+    const nuevo = crear('button', 'vacio', '+ Sonido'); nuevo.title = 'Agregar un sonido para ' + personaje;
+    nuevo.addEventListener('click', () => { seccionElegida = { personaje }; $('dmArchivo').click(); });
+    grilla.append(nuevo);
+  }
+  const rotuloHab = crear('label', '', 'Habilidades'), habilidades = crear('textarea');
+  habilidades.maxLength = 120; habilidades.value = ficha.habilidades; habilidades.placeholder = 'Bola de fuego, sigilo…';
+  habilidades.addEventListener('change', () => { ficha.habilidades = habilidades.value.trim(); guardar(); pintarGente(sala.gente()); });
+  rotuloHab.append(habilidades);
+  const rotuloMax = crear('label', '', 'Vida máxima '), maximo = crear('input'); maximo.type = 'number'; maximo.min = 1; maximo.max = 9999; maximo.value = vida.max;
+  maximo.addEventListener('change', () => { const mx = Number(maximo.value) || 1; fijarVida(Math.min(vida.actual, mx), mx); });
+  rotuloMax.append(maximo);
+  const volver = crear('button', 'volver', 'Dar vuelta');
+  dorso.append(crear('div', 'cinta', 'Sonidos de ' + personaje), grilla, rotuloHab, rotuloMax, volver);
+
+  // Un clic en la carta la da vuelta, salvo que el clic haya sido en un botón o una casilla.
+  carta.addEventListener('click', (ev) => {
+    if (ev.target.closest('button, input, textarea, label') && ev.target !== volver) return;
+    if (!cartasVolteadas.delete(p.userId)) cartasVolteadas.add(p.userId);
+    carta.classList.toggle('volteada', cartasVolteadas.has(p.userId));
+  });
+  giro.append(frente, dorso); carta.append(giro);
+  return carta;
+}
+function pintarMesa(lista, simulada) {
+  const conectada = sala.conectada || !!simulada, jugadores = conectada ? lista.filter((p) => p.rol !== 'dm') : [];
+  $('mesaCodigo').hidden = $('mesaCopiar').hidden = !conectada;
+  $('mesaCrear').hidden = conectada;
+  $('mesaSalaRotulo').textContent = conectada ? 'Sala' : 'Sin sala abierta';
+  $('mesaCodigo').textContent = $('salaCodigo').value;
+  $('mesaCuenta').textContent = conectada ? jugadores.length + (jugadores.length === 1 ? ' jugador en la mesa' : ' jugadores en la mesa') : '';
+  $('mesaAviso').textContent = !conectada ? 'Creá una sala y pasales el código a los jugadores para que se sienten a la mesa.'
+    : (jugadores.length ? '' : 'Pasales el código a los jugadores. Sus cartas van a aparecer alrededor de la mesa.');
+  const asientos = $('mesaAsientos');
+  asientos.textContent = '';
+  for (const p of jugadores) asientos.append(armarCarta(p));
+  for (let i = jugadores.length; i < 4; i++) {
+    const libre = document.createElement('div'); libre.className = 'carta vacia';
+    libre.innerHTML = '<div class="cartaGiro"><div class="cara">Asiento<br>libre</div></div>';
+    asientos.append(libre);
+  }
+  acomodarMesa();
+}
+$('mesaCrear').addEventListener('click', () => entrarSala(nuevoCodigo()));
+$('mesaCopiar').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText($('salaCodigo').value); $('mesaCopiar').textContent = 'Copiado'; }
+  catch { $('mesaCopiar').textContent = 'No se pudo copiar'; }
+  setTimeout(() => { $('mesaCopiar').textContent = 'Copiar código'; }, 1500);
+});
+$('mesaAjustes').addEventListener('click', () => document.body.classList.toggle('ajustes-abiertos'));
+$('mesaFondo').addEventListener('click', () => $('fondoImagen').click());
+// El cajón de sonidos dice qué está sonando aunque esté cerrado.
+setInterval(() => {
+  if (!vistaMesa()) return;
+  const sonando = [...sonidos.listaAmbientes().filter((a) => sonidos.ambienteActivo(a.id)).map((a) => a.nombre),
+    ...datosDM().propios.filter((p) => sonidos.propioSonando(clavePropio(p.n))).map((p) => p.nombre)];
+  $('mesaSonando').textContent = sonando.length ? 'Sonando: ' + sonando.join(', ') : 'En silencio';
+}, 700);
+
 // ---------- Jugador o Dungeon Master ----------
 // Es el mismo programa para los dos; el rol solo decide qué se muestra. El jugador no ve
 // el panel del Dungeon Master.
@@ -923,6 +1132,17 @@ let sinPersonaje = false;
 function aplicarVistaDM() {
   sinPersonaje = !document.body.classList.contains('rol-jugador') && !$('dmConCamara').checked;
   document.body.classList.toggle('sin-camara', sinPersonaje);
+  // El DM sin personaje ve la mesa; el cajón de sonidos se muda a ella (y vuelve al panel si no).
+  const conMesa = sinPersonaje;
+  if (conMesa !== vistaMesa()) {
+    document.body.classList.toggle('vista-mesa', conMesa);
+    document.body.classList.remove('ajustes-abiertos');
+    if (conMesa) { $('mesaCajon').append($('dm')); $('dm').open = false; } else $('dmLugar').after($('dm'));
+    $('dmTitulo').textContent = conMesa ? 'Sonidos' : 'Panel del Dungeon Master';
+    $('mesaSonando').textContent = '';
+    if (conMesa) { actualizarVistaFondo(); pintarMesa(sala.gente()); }
+    else if (sala.conectada) pintarGente(sala.gente());
+  }
   if (sinPersonaje) {
     if ($('iniciar').disabled) puente.enviar('control', { tipo: 'pausa', valor: true });       // deja de seguir
     if (camaraActiva) puente.enviar('camara', { tipo: 'detener' });
@@ -931,8 +1151,8 @@ function aplicarVistaDM() {
 function aplicarRol(rol, recordar) {
   document.body.classList.toggle('rol-jugador', rol !== 'dm');
   $('rolSelector').value = rol === 'dm' ? 'dm' : 'jugador';
-  if (rol === 'dm') $('dm').open = true;
   aplicarVistaDM();
+  if (rol === 'dm' && !vistaMesa()) $('dm').open = true;
   if (recordar) guardar({ rol });
 }
 $('dmConCamara').addEventListener('change', () => { aplicarVistaDM(); guardar({ dmConCamara: $('dmConCamara').checked }); });
@@ -962,7 +1182,7 @@ $('rolSelector').addEventListener('change', async (e) => { if (sala.conectada) a
 let tAnterior = performance.now();
 function bucle() {
   requestAnimationFrame(bucle);
-  if (inicioAbierto()) return;
+  if (inicioAbierto() || vistaMesa()) return;      // tapado por otra pantalla: no hace falta dibujar
   const tAhora = performance.now();
   const dt = Math.min((tAhora - tAnterior) / 1000, 0.25);
   tAnterior = tAhora;
@@ -972,6 +1192,7 @@ function bucle() {
   if (titere) titere.actualizar(dt, 1 - Math.exp(-dt * (30 - 26 * Number($('suavizado').value))));
   renderer.render(escena, camara);
   enviarCuadroCamara(tAhora);
+  dibujarMiniatura(tAhora);
   cuadrosDib++;
   const ahora = performance.now();
   if (ahora - t0Medidas >= 1000) {
@@ -1077,9 +1298,20 @@ if (puente.pruebaSala) {
         sala.fijarMesa((m) => ({ ...m, vidas: { [jugador.userId]: { actual: 7, max: 12 } }, fondo: { tipo: 'color', color: '#445566', v: 1 } }));
         [...document.querySelectorAll('#dmEfectos button')].find((b) => b.textContent === 'Campana').click();
         setTimeout(() => sala.fijarMesa((m) => ({ ...m, fondo: { tipo: 'imagen', v: 2 } })), 1500);
+        setTimeout(() => { const c = document.querySelector('.carta:not(.vacia)'); if (c) { c.click(); console.log('SALA carta volteada: ' + c.classList.contains('volteada')); } }, 8000);
       }, 500);
     } catch (e) { console.error('PRUEBA SALA FALLÓ: ' + (e.stack || e)); }
   }, 3000);
+}
+
+// ---------- Prueba de la mesa con muchos jugadores (ROLCAM_PRUEBA_MESA = cantidad) ----------
+if (puente.pruebaMesa) {
+  setTimeout(() => {
+    $('dmConCamara').checked = false; aplicarRol('dm', false);
+    const nombres = ['Maga Lira', 'Thorin', 'Sombra', 'Elara', 'Grom', 'Fray Tuck', 'Nyx', 'Kael'];
+    pintarMesa(nombres.slice(0, puente.pruebaMesa).map((personaje, i) => ({ userId: 'u' + i, rol: 'jugador', jugador: 'Jugador ' + (i + 1), personaje })), true);
+    console.log('MESA cartas: ' + document.querySelectorAll('.carta:not(.vacia)').length + ', libres: ' + document.querySelectorAll('.carta.vacia').length);
+  }, 4500);
 }
 
 // ---------- Prueba automática de la pantalla de inicio (ROLCAM_PRUEBA_INICIO) ----------

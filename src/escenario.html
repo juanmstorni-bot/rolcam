@@ -45,6 +45,9 @@
   .persona .quien { display: block; }
   .persona .quien b { color: #e8e8ea; }
   .persona input[type=number] { width: 56px; }
+  .persona video { display: block; width: 100%; aspect-ratio: 16 / 9; background: #000; border: 1px solid #3d4560; border-radius: 6px; margin: 6px 0; cursor: zoom-in; box-sizing: border-box; }
+  .persona video.grande { position: fixed; left: 340px; top: 16px; width: min(960px, calc(100vw - 360px)); z-index: 5; cursor: zoom-out; box-shadow: 0 10px 40px rgba(0,0,0,.6); }
+  .persona .sinVista { color: #8b90a0; font-size: 12px; margin: 4px 0; }
   #hud { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); background: rgba(20,22,28,.8); border: 1px solid #343846; border-radius: 999px; padding: 6px 16px; display: none; }
   #hud b { color: #ffb3c0; }
   #panel .grilla button.quitar { border-color: #c0566a; color: #ffb3c0; }
@@ -66,6 +69,79 @@
   .muestra.ojo { background: #6fd3ff; } .muestra.boca { background: #ff8fb3; }
   small { color: #8b90a0; display: block; margin-top: 6px; }
   body.limpio #panel { display: none; }
+
+  /* ---------- Mesa del Dungeon Master ---------- */
+  #mesa { position: fixed; inset: 0; z-index: 4; display: none; flex-direction: column; color: #eadfc8;
+    background: radial-gradient(ellipse at 50% 45%, #2b2119 0%, #17110d 55%, #0a0806 100%); font: 14px/1.4 system-ui, sans-serif; }
+  body.vista-mesa #mesa { display: flex; }
+  body.vista-mesa #panel { display: none; }
+  body.vista-mesa.ajustes-abiertos #panel { display: block; left: auto; right: 16px; top: 62px; z-index: 30; max-height: calc(100vh - 130px); box-shadow: 0 12px 40px rgba(0,0,0,.7); }
+  body.vista-mesa.limpio #panel { display: none; }
+  body.vista-mesa #salaGente { display: none; }
+  #mesa button { font: inherit; cursor: pointer; color: #f3e6c8; background: linear-gradient(#33281f, #1d1611); border: 1px solid #7a5d36; border-radius: 6px; padding: 6px 12px; }
+  #mesa button:hover { border-color: #ffb650; }
+  #mesa button:disabled { opacity: .5; cursor: default; }
+  #mesaBarra { display: flex; align-items: center; gap: 12px; padding: 8px 16px; background: linear-gradient(#241a13, #18110c); border-bottom: 1px solid #5a4630; min-height: 34px; }
+  #mesaBarra .marca { font: 22px Georgia, 'Palatino Linotype', serif; letter-spacing: .1em; color: #f3d9a4; }
+  #mesaCodigo { font: 600 16px ui-monospace, Consolas, monospace; letter-spacing: 3px; background: #0e0b09; border: 1px solid #8a6a3c; border-radius: 6px; padding: 4px 10px; color: #ffd98a; user-select: all; }
+  #mesaBarra .hueco { flex: 1; }
+  #mesaBarra .tenue { color: #b7a888; }
+  #mesaEscena { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+  #mesaSombra, #mesaCanto, #mesaTapa, #mesaVista { position: absolute; border-radius: 50%; transform: translate(-50%, -50%); }
+  #mesaSombra { background: radial-gradient(ellipse, rgba(0,0,0,.75) 35%, rgba(0,0,0,0) 70%); }
+  #mesaCanto { background: linear-gradient(90deg, #2a180c, #5b371b 30%, #6a4120 50%, #4b2d16 75%, #24140a); }
+  #mesaTapa { background: repeating-radial-gradient(ellipse at 50% 50%, #7b4d27 0 9px, #6f4421 9px 11px, #84542b 11px 22px); box-shadow: inset 0 0 0 5px #4a2c14, inset 0 0 40px rgba(0,0,0,.45); }
+  #mesaVista { background: #1d2230 center / cover no-repeat; box-shadow: inset 0 0 0 4px #2a180c, inset 0 0 0 6px #b48a4a, inset 0 8px 40px rgba(0,0,0,.75); }
+  #mesaCentro { position: absolute; transform: translate(-50%, -50%); text-align: center; display: grid; gap: 6px; justify-items: center; z-index: 50; }
+  #mesaCentro small { color: #e8dcc0; text-shadow: 0 1px 3px #000, 0 0 8px #000; margin: 0; }
+  #mesa #mesaFondo { background: rgba(14,11,9,.82); border-color: #e0a050; padding: 8px 14px; }
+  #mesaAviso { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); color: #b7a888; text-align: center; white-space: nowrap; }
+  .carta { position: absolute; width: 150px; height: 214px; perspective: 900px; cursor: pointer; transition: left .4s, top .4s; }
+  .cartaGiro { position: absolute; inset: 0; transform-style: preserve-3d; transition: transform .55s cubic-bezier(.3,.9,.3,1); }
+  .carta:hover .cartaGiro { transform: translateY(-5px); }
+  .carta.volteada .cartaGiro { transform: rotateY(180deg); }
+  .carta.volteada:hover .cartaGiro { transform: rotateY(180deg) translateY(-5px); }
+  .cara { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; border-radius: 10px; padding: 7px; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px;
+    background: repeating-linear-gradient(92deg, #5a3a22 0 7px, #523420 7px 9px, #61402a 9px 17px); border: 2px solid #1a100a; box-shadow: inset 0 0 0 2px #8a6238, 0 8px 18px rgba(0,0,0,.6); }
+  .cara.dorso { transform: rotateY(180deg); cursor: default; }
+  .carta.herida .cara { box-shadow: inset 0 0 0 2px #d0483c, 0 0 18px rgba(220,60,40,.7); }
+  .cinta { background: #f1dfb8; color: #2a1a0e; font: 14px/1.2 Georgia, serif; text-align: center; padding: 3px 4px; border-radius: 3px; border: 1px solid #1a100a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .retrato { flex: 1; min-height: 0; border-radius: 46% 46% 6px 6px / 30% 30% 6px 6px; overflow: hidden; background: #0e0b09; border: 2px solid #1a100a; display: flex; align-items: center; justify-content: center; color: #8d7c62; font-size: 11px; text-align: center; }
+  .retrato video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .datos { background: #f1dfb8; color: #2a1a0e; border: 1px solid #1a100a; border-radius: 3px; padding: 2px 5px; font-size: 11px; line-height: 1.25; }
+  .datos b { display: block; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .datos span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: #5a4028; }
+  .vida { display: flex; align-items: center; justify-content: center; gap: 6px; }
+  #mesa .vida button { width: 24px; height: 24px; padding: 0; border-radius: 50%; line-height: 1; font-size: 16px; }
+  .corazon { min-width: 62px; text-align: center; background: #b3261e; color: #fff; border: 2px solid #1a100a; border-radius: 12px; padding: 1px 6px; font: 600 14px system-ui, sans-serif; }
+  .corazon::before { content: '\2665  '; }
+  .dorso .grilla { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; overflow-y: auto; align-content: start; flex: 1; min-height: 0; }
+  #mesa .dorso .grilla button { padding: 4px; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #mesa .dorso .grilla button.vacio { border-style: dashed; color: #c9b48d; }
+  #mesa .dorso .grilla button.quitar { border-color: #c0566a; color: #ffb3c0; }
+  .dorso label { font-size: 11px; color: #e8d6b0; display: block; }
+  .dorso textarea, .dorso input { font: 11px system-ui, sans-serif; background: #f1dfb8; color: #2a1a0e; border: 1px solid #1a100a; border-radius: 3px; padding: 2px 4px; box-sizing: border-box; }
+  .dorso textarea { width: 100%; height: 34px; resize: none; display: block; }
+  .dorso input { width: 44px; }
+  #mesa .dorso .volver { padding: 2px; font-size: 11px; }
+  .carta.vacia { cursor: default; }
+  .carta.vacia .cara { background: rgba(20,15,11,.55); border: 2px dashed #5a4630; box-shadow: none; align-items: center; justify-content: center; color: #8d7c62; text-align: center; font-size: 12px; }
+  .carta.vacia:hover .cartaGiro { transform: none; }
+  #mesaCajon { background: linear-gradient(#241a13, #18110c); border-top: 1px solid #5a4630; }
+  #mesaCajon #dm { margin: 0; padding: 0 16px 10px; border: 0; }
+  #mesaCajon #dm:not([open]) { padding-bottom: 0; }
+  #mesaCajon #dm > summary { padding: 9px 0; cursor: pointer; color: #f3d9a4; font: 16px Georgia, serif; }
+  #mesaCajon #dm > summary #mesaSonando { font: 13px system-ui, sans-serif; color: #b7a888; margin-left: 12px; }
+  #mesaCajon .rotulo { color: #c9b48d; margin: 6px 0 4px; }
+  #mesaCajon .grilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+  #mesaCajon .grilla button { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #mesaCajon .grilla button.activo { background: linear-gradient(#a8621c, #7a3f0e); border-color: #ffd98a; color: #fff3da; }
+  #mesaCajon .grilla button.vacio { border-style: dashed; color: #c9b48d; }
+  #mesaCajon .grilla button.quitar { border-color: #c0566a; color: #ffb3c0; }
+  #mesaCajon label { display: inline-block; margin: 8px 16px 0 0; color: #d9c7a3; }
+  #mesaCajon input[type=range] { vertical-align: middle; width: 180px; }
+  #mesaCajon small { display: inline-block; margin: 6px 16px 0 0; color: #8d806b; }
+  #mesaCajon #dmSilencio, #mesaCajon #dmRestaurar { margin: 8px 12px 0 0; }
 
   /* Pantalla de inicio */
   body.en-inicio #panel, body.en-inicio #hud { display: none !important; }
@@ -194,6 +270,32 @@
   <button id="inicioSonido">Sonido: sí</button>
 </div>
 
+<div id="mesa">
+  <div id="mesaBarra">
+    <span class="marca">RolCam</span>
+    <span class="tenue" id="mesaSalaRotulo">Sala</span>
+    <span id="mesaCodigo" hidden></span>
+    <button id="mesaCopiar" hidden>Copiar código</button>
+    <button id="mesaCrear">Crear sala</button>
+    <span class="hueco"></span>
+    <span class="tenue" id="mesaCuenta"></span>
+    <button id="mesaAjustes">Ajustes</button>
+  </div>
+  <div id="mesaEscena">
+    <div id="mesaSombra"></div>
+    <div id="mesaCanto"></div>
+    <div id="mesaTapa"></div>
+    <div id="mesaVista"></div>
+    <div id="mesaAsientos"></div>
+    <div id="mesaCentro">
+      <button id="mesaFondo">Cambiar fondo</button>
+      <small>Lo ven todos los jugadores</small>
+    </div>
+    <div id="mesaAviso"></div>
+  </div>
+  <div id="mesaCajon"></div>
+</div>
+
 <div id="panel">
   <h1>RolCam</h1>
   <button id="iniciar" class="parteCamara">Activar cámara</button>
@@ -226,8 +328,9 @@
     <div id="salaGente"></div>
     <button id="salaFondo" class="secundario soloDM" hidden>Poner mi fondo a toda la mesa</button>
   </fieldset>
+  <span id="dmLugar" hidden></span>
   <details id="dm">
-    <summary>Panel del Dungeon Master</summary>
+    <summary><span id="dmTitulo">Panel del Dungeon Master</span><span id="mesaSonando"></span></summary>
     <label>Volumen general <input id="dmVolumen" type="range" min="0" max="1" step="0.05" value="0.8"></label>
     <div class="rotulo">Ambientes (se repiten; se pueden combinar)</div>
     <div id="dmAmbientes" class="grilla"></div>

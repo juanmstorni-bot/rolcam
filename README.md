@@ -106,6 +106,24 @@ midiendo grabaciones de referencia (qué graves, qué ritmo, cuánto duran), sin
 Para que los jugadores los escuchen, el DM comparte la ventana de RolCam **con sonido** en
 Discord. Todavía no hay una "sala" que conecte los programas de la mesa (ver hoja de ruta).
 
+## La mesa del Dungeon Master
+
+La pantalla del DM es distinta a la del jugador: muestra una **mesa redonda** con una
+**carta por personaje** sentada alrededor. Entran cómodas hasta 8 cartas; con menos de 4
+jugadores, los lugares vacíos se ven como asientos libres.
+
+- **Frente de la carta:** el personaje en vivo, su nombre, el del jugador, sus habilidades
+  y su vida, con botones − y + para ajustarla. Si le queda poca vida, la carta se pone roja.
+- **Dorso** (se da vuelta con un clic): los sonidos de ese personaje, el botón "+ Sonido",
+  y casillas para anotar sus habilidades y su vida máxima.
+- **Centro de la mesa:** muestra el fondo actual. **Cambiar fondo** elige una imagen y se
+  la pone a todos los jugadores.
+- **Sonidos:** un cajón desplegable, abajo; cerrado dice qué está sonando.
+- **Arriba:** el código de la sala con un botón para copiarlo, y **Ajustes** (el panel
+  clásico: rol, color de fondo, volver al inicio, salir de la sala).
+
+Si el DM marca "Usar también cámara y personaje" en Ajustes, vuelve a la vista clásica.
+
 ## Sala de la mesa
 
 La sala conecta el RolCam del Dungeon Master con los de los jugadores:
@@ -121,6 +139,9 @@ Con la sala abierta, lo que hace el DM llega a todos:
 - **Poner mi fondo a toda la mesa** aplica el fondo del DM a todos los personajes.
 - El DM ve la **lista de la mesa** y lleva los **puntos de vida** de cada personaje; cada
   jugador ve los suyos.
+- El DM ve a cada **personaje en vivo** en su panel, debajo del nombre (tocando la imagen
+  se agranda). Lo que viaja es un video chico del personaje ya dibujado (320 × 180, 10
+  cuadros por segundo) y solo lo recibe el DM. La cámara real del jugador nunca sale de su PC.
 - Debajo de cada personaje, el DM puede cargarle **sonidos propios** con "+ Sonido" (un
   hechizo para el mago, una espada para el guerrero). Quedan guardados con el nombre del
   personaje y suenan para toda la mesa.
@@ -159,6 +180,9 @@ ubicación del componente. El panel de controles nunca sale en la cámara.
 5. En Discord: Ajustes > Voz y video > Cámara > **OBS Virtual Camera**.
 
 ## Cómo está armado
+
+La explicación completa (procesos, seguimiento, cámara virtual y conexión entre PC) está en
+[docs/ARQUITECTURA.md](docs/ARQUITECTURA.md).
 
 | Archivo | Qué hace |
 | --- | --- |

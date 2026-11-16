@@ -59,8 +59,18 @@ Decisiones de diseño que conviene respetar:
    sala podría escribir el estado "mesa": si hace falta, restringirlo con el sistema de
    roles de Trystero.
    Ideas ya pedidas para esa etapa:
-   - **Ver a los personajes en el panel del DM** (su imagen en vivo, no solo la lista con
-     nombre y vida). Trystero permite enviar video entre participantes (`room.addStream`).
+   - **Ver a los personajes en el panel del DM**: hecho en la 1.6.0. Cada jugador manda al DM
+     un video de 320 × 180 a 10 cuadros por segundo (`empezarMiniatura` en `src/escenario.js`,
+     `compartirVista` en `src/sala.js`, con `room.addStream` de Trystero). Probado entre dos
+     ventanas locales; falta probarlo entre PC reales y medir cuánto carga a la Celeron.
+     Posibles mejoras: que los jugadores también se vean entre sí, y subir la calidad.
+   - **Mesa del DM** (1.7.0): pantalla propia para el DM (sección "Mesa del Dungeon Master"
+     en `src/escenario.js`, estilos `#mesa` y `.carta` en `src/escenario.html`): mesa redonda,
+     cartas que se dan vuelta, cajón de sonidos, fondo desde el centro de la mesa. Las
+     habilidades las anota el DM (se guardan por nombre de personaje en `ajustes.dm.fichas`).
+     Ideas pendientes: que cada jugador cargue sus propias habilidades y foto, fondos
+     recientes para cambiar de escena con un clic, orden de iniciativa, tirada de dados,
+     notas privadas del DM, y probar con 6 a 8 jugadores.
    - **Sonidos incluidos por tipo de personaje** (hoy cada personaje tiene su botonera, pero
      solo con archivos que carga el DM).
    Hecho en la 1.4.0: vista del DM sin cámara ni personaje, y sonidos propios por personaje.
