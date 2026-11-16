@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <title>RolCam — Escenario</title>
 <style>
+  html { color-scheme: dark; }
   html, body { margin: 0; height: 100%; background: #1d2230; color: #e8e8ea; font: 14px/1.4 system-ui, sans-serif; overflow: hidden; }
   #lienzo { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
   #panel { position: fixed; left: 16px; top: 16px; width: 300px; background: rgba(20,22,28,.9); border: 1px solid #343846; border-radius: 10px; padding: 14px; }
@@ -19,12 +20,22 @@
   #panel { max-height: calc(100vh - 60px); overflow-y: auto; }
   #panel fieldset { border: 1px solid #343846; border-radius: 8px; margin: 10px 0; padding: 8px 10px; }
   #panel legend { color: #b9c6ff; padding: 0 4px; }
+  #panel details { border: 1px solid #343846; border-radius: 8px; margin: 10px 0; padding: 8px 10px; }
+  #panel summary { color: #b9c6ff; cursor: pointer; }
+  .rotulo { color: #b9bdc9; margin: 10px 0 4px; }
+  .grilla { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  #panel .grilla button { background: #262b3a; border-color: #3d4560; padding: 7px 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #panel .grilla button.activo { background: #5b7cfa; border-color: #5b7cfa; }
+  #panel .grilla button.vacio { color: #8b90a0; border-style: dashed; }
   #camEstado { color: #b9bdc9; margin: 6px 0; }
   #estado { margin: 8px 0; color: #b9bdc9; min-height: 2.8em; }
   #medidas { font-variant-numeric: tabular-nums; color: #9fe3a8; white-space: pre; }
   #soltar { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(91,124,250,.25); font-size: 22px; pointer-events: none; }
-  #elegir, #editor { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(12,13,18,.92); z-index: 10; gap: 24px; }
-  #elegir.abierto, #editor.abierto { display: flex; }
+  #elegir, #editor, #rol { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(12,13,18,.92); z-index: 10; gap: 24px; }
+  #elegir.abierto, #editor.abierto, #rol.abierto { display: flex; }
+  #rol button { font: inherit; padding: 9px 14px; border-radius: 8px; border: 1px solid #5b7cfa; background: #5b7cfa; color: #fff; cursor: pointer; }
+  body.rol-jugador #dm { display: none; }
+  #panel .grilla button.quitar { border-color: #c0566a; color: #ffb3c0; }
   .caja { background: #1b1e27; border: 1px solid #343846; border-radius: 12px; padding: 20px; display: grid; gap: 10px; min-width: 260px; }
   .caja p { margin: 0 0 4px; }
   #elegir button, #editor button { font: inherit; padding: 9px 14px; border-radius: 8px; border: 1px solid #5b7cfa; background: #5b7cfa; color: #fff; cursor: pointer; }
@@ -92,6 +103,15 @@
   </div>
 </div>
 
+<div id="rol">
+  <div class="caja">
+    <p>¿Cómo vas a usar RolCam?</p>
+    <button id="rolJugador">Soy jugador</button>
+    <button id="rolDM">Soy Dungeon Master</button>
+    <small>Se puede cambiar después desde el panel.</small>
+  </div>
+</div>
+
 <div id="panel">
   <h1>RolCam</h1>
   <button id="iniciar">Activar cámara</button>
@@ -110,6 +130,26 @@
     <button id="camInstalar" class="secundario">Instalar cámara virtual en Windows</button>
     <button id="camDesinstalar" class="secundario">Desinstalar cámara virtual</button>
   </fieldset>
+  <details id="dm">
+    <summary>Panel del Dungeon Master</summary>
+    <label>Volumen general <input id="dmVolumen" type="range" min="0" max="1" step="0.05" value="0.8"></label>
+    <div class="rotulo">Ambientes (se repiten; se pueden combinar)</div>
+    <div id="dmAmbientes" class="grilla"></div>
+    <div class="rotulo">Efectos (suenan una vez)</div>
+    <div id="dmEfectos" class="grilla"></div>
+    <input id="dmArchivo" type="file" accept="audio/*" hidden>
+    <button id="dmSilencio" class="secundario">Silenciar todo</button>
+    <label><input id="dmEditar" type="checkbox"> Editar listas (tocá un sonido para quitarlo)</label>
+    <button id="dmRestaurar" class="secundario" hidden>Recuperar los sonidos incluidos</button>
+    <small>Con "+ Agregar" sumás tus propios archivos (MP3, WAV, OGG) a cada lista.</small>
+    <small>Para que los jugadores escuchen: en Discord, compartí la ventana de RolCam con sonido.</small>
+  </details>
+  <label>Uso de RolCam
+    <select id="rolSelector">
+      <option value="jugador">Jugador</option>
+      <option value="dm">Dungeon Master</option>
+    </select>
+  </label>
   <label>Modo de seguimiento
     <select id="modo">
       <option value="completo">Completo: cuerpo, cara y manos</option>

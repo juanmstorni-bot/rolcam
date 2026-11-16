@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('puente', {
   recibir(canal, fn) { if (CANALES.includes(canal)) ipcRenderer.on(canal, (_e, datos) => fn(datos)); },
   consultar(canal, datos) { return CONSULTAS.includes(canal) ? ipcRenderer.invoke(canal, datos) : Promise.reject(new Error('Canal no permitido')); },
   pruebaCamara: !!process.env.ROLCAM_CAMARA_FALSA,
+  pruebaSonido: !!process.env.ROLCAM_PRUEBA_SONIDO,
   prueba2d: process.env.ROLCAM_PRUEBA_2D || '',
   prueba: process.env.ROLCAM_PRUEBA === '1',
 });

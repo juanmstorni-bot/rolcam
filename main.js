@@ -196,7 +196,9 @@ app.whenReady().then(() => {
   ipcMain.handle('leer-ajustes', () => leerAjustes());
   ipcMain.on('guardar-ajustes', (_e, ajustes) => { if (ajustes && typeof ajustes === 'object') guardarAjustes(ajustes); });
   ipcMain.handle('guardar-archivo', (_e, { tipo, datos }) => {
-    const nombre = ARCHIVOS_USUARIO[tipo];
+    // Los sonidos propios del Dungeon Master van en archivos numerados (sonido1 … sonido99).
+    const casillero = /^sonido([1-9][0-9]?)$/.exec(String(tipo));
+    const nombre = casillero ? 'sonido-' + casillero[1] + '.bin' : ARCHIVOS_USUARIO[tipo];
     if (!nombre || !datos) return false;
     fs.mkdirSync(carpetaDatos(), { recursive: true });
     fs.writeFileSync(path.join(carpetaDatos(), nombre), Buffer.from(datos));

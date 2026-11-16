@@ -1,6 +1,6 @@
 {
   "name": "rolcam",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Avatar de personaje por cámara para partidas de rol online",
   "main": "main.js",
   "license": "GPL-3.0-or-later",

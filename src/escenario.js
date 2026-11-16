@@ -5,6 +5,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import * as Kalidokit from 'kalidokit';
 import { cargarModeloGenerico } from './importar.js';
+import * as sonidos from './sonidos.js';
 import { Titere2D, marcadoresPorDefecto, quitarFondoLiso, tieneTransparencia } from './titere2d.js';
 
 const puente = window.puente;
@@ -605,6 +606,124 @@ puente.recibir('camara-estado', ({ activa, texto }) => {
   $('camEstado').textContent = texto || (camaraActiva ? 'Activa.' : 'Apagada.');
 });
 
+// ---------- Panel del Dungeon Master ----------
+// Dos listas: ambientes (se repiten hasta apagarlos) y efectos (suenan una vez). Cada una
+// mezcla los sonidos incluidos con los archivos que agregue el usuario, y de las dos se
+// puede quitar cualquiera. Los sonidos salen de esta ventana: si el DM la comparte con
+// sonido en Discord, los jugadores los escuchan.
+const SECCIONES = {
+  ambientes: { caja: 'dmAmbientes', incluidos: () => sonidos.listaAmbientes() },
+  efectos: { caja: 'dmEfectos', incluidos: () => sonidos.listaEfectos() },
+};
+const MAX_PROPIOS = 60;
+let seccionElegida = null;
+const clavePropio = (n) => 'p' + n;
+
+function datosDM() {
+  if (!ajustes.dm) ajustes.dm = { ocultos: { ambientes: [], efectos: [] }, propios: [], siguiente: 1 };
+  // Versión anterior: ocho casilleros sueltos. Pasan a la lista de efectos.
+  if (ajustes.sonidos) {
+    for (const [n, nombre] of Object.entries(ajustes.sonidos)) ajustes.dm.propios.push({ n: Number(n), nombre, seccion: 'efectos' });
+    ajustes.dm.siguiente = Math.max(ajustes.dm.siguiente, 9);
+    delete ajustes.sonidos;
+  }
+  return ajustes.dm;
+}
+
+function pintarDM() {
+  const dm = datosDM(), editando = $('dmEditar').checked;
+  $('dmRestaurar').hidden = !(editando && (dm.ocultos.ambientes.length || dm.ocultos.efectos.length));
+  for (const [seccion, def] of Object.entries(SECCIONES)) {
+    const caja = $(def.caja);
+    caja.textContent = '';
+    const agregar = (texto, clase, alTocar) => {
+      const b = document.createElement('button');
+      b.textContent = (editando && clase !== 'vacio' ? '✕ ' : '') + texto;
+      b.title = texto;
+      b.className = clase + (editando && clase !== 'vacio' ? ' quitar' : '');
+      b.addEventListener('click', () => alTocar(b));
+      caja.appendChild(b);
+    };
+    for (const s of def.incluidos()) {
+      if (dm.ocultos[seccion].includes(s.id)) continue;
+      const activo = seccion === 'ambientes' && sonidos.ambienteActivo(s.id);
+      agregar(s.nombre, activo ? 'activo' : '', (b) => {
+        if ($('dmEditar').checked) {
+          if (sonidos.ambienteActivo(s.id)) sonidos.alternarAmbiente(s.id);
+          dm.ocultos[seccion].push(s.id); guardar(); pintarDM();
+        } else if (seccion === 'ambientes') b.classList.toggle('activo', sonidos.alternarAmbiente(s.id));
+        else sonidos.tocarEfecto(s.id);
+      });
+    }
+    for (const p of dm.propios.filter((x) => x.seccion === seccion)) {
+      agregar(p.nombre, sonidos.propioSonando(clavePropio(p.n)) ? 'activo' : '', (b) => {
+        if ($('dmEditar').checked) {
+          sonidos.quitarPropio(clavePropio(p.n));
+          dm.propios = dm.propios.filter((x) => x !== p); guardar(); pintarDM();
+        } else {
+          b.classList.toggle('activo', sonidos.alternarPropio(clavePropio(p.n), seccion === 'ambientes', () => b.classList.remove('activo')));
+        }
+      });
+    }
+    if (!editando) agregar('+ Agregar', 'vacio', () => { seccionElegida = seccion; $('dmArchivo').click(); });
+  }
+}
+
+$('dmArchivo').addEventListener('change', async (ev) => {
+  const archivo = ev.target.files[0], seccion = seccionElegida, dm = datosDM();
+  ev.target.value = '';
+  if (!archivo || !seccion) return;
+  if (dm.propios.length >= MAX_PROPIOS) { ponerEstado('Llegaste al máximo de sonidos propios. Quitá alguno para agregar otro.'); return; }
+  // Se reutiliza el primer número libre, para no acumular archivos viejos.
+  const usados = new Set(dm.propios.map((p) => p.n));
+  let n = 1; while (usados.has(n)) n++;
+  try {
+    const datos = await archivo.arrayBuffer();
+    await sonidos.cargarPropio(clavePropio(n), datos);
+    await puente.consultar('guardar-archivo', { tipo: 'sonido' + n, datos });
+    dm.propios.push({ n, nombre: archivo.name.replace(/\.[^.]+$/, ''), seccion });
+    guardar();
+    pintarDM();
+  } catch (e) {
+    console.error('No se pudo cargar el sonido: ' + (e.message || e));
+    ponerEstado('No se pudo leer ese archivo de audio. Probá con MP3, WAV u OGG.');
+  }
+});
+$('dmVolumen').addEventListener('input', (ev) => sonidos.volumenGeneral(Number(ev.target.value)));
+$('dmSilencio').addEventListener('click', () => { sonidos.silenciarTodo(); pintarDM(); });
+$('dmEditar').addEventListener('change', pintarDM);
+$('dmRestaurar').addEventListener('click', () => { const dm = datosDM(); dm.ocultos = { ambientes: [], efectos: [] }; guardar(); pintarDM(); });
+
+// Al arrancar, se vuelven a cargar los sonidos propios guardados.
+async function restaurarSonidos() {
+  const dm = datosDM();
+  for (const p of [...dm.propios]) {
+    try {
+      const r = await fetch('/usuario/sonido-' + p.n + '.bin');
+      if (!r.ok) throw new Error('no está el archivo');
+      await sonidos.cargarPropio(clavePropio(p.n), await r.arrayBuffer());
+    } catch (e) {
+      console.error('Sonido "' + p.nombre + '": ' + (e.message || e));
+      dm.propios = dm.propios.filter((x) => x !== p);
+    }
+  }
+  pintarDM();
+}
+
+// ---------- Jugador o Dungeon Master ----------
+// Es el mismo programa para los dos; el rol solo decide qué se muestra. El jugador no ve
+// el panel del Dungeon Master.
+function aplicarRol(rol, recordar) {
+  document.body.classList.toggle('rol-jugador', rol !== 'dm');
+  $('rolSelector').value = rol === 'dm' ? 'dm' : 'jugador';
+  if (rol === 'dm') $('dm').open = true;
+  $('rol').classList.remove('abierto');
+  if (recordar) guardar({ rol });
+}
+$('rolJugador').addEventListener('click', () => aplicarRol('jugador', true));
+$('rolDM').addEventListener('click', () => aplicarRol('dm', true));
+$('rolSelector').addEventListener('change', (e) => aplicarRol(e.target.value, true));
+
 // ---------- Bucle de dibujo ----------
 let tAnterior = performance.now();
 function bucle() {
@@ -664,6 +783,10 @@ window.addEventListener('drop', (e) => {
     if (ajustes.personaje && ajustes.tipoPersonaje !== '2d') bien = await cargarPersonaje('/usuario/personaje.vrm', ajustes.personaje, ajustes.formatoPersonaje || 'vrm');
     if (!bien) cargarVRM('/recursos/muestra.vrm', 'personaje de ejemplo');
   }
+  restaurarSonidos();
+  if (ajustes.rol) aplicarRol(ajustes.rol, false);
+  else if (puente.prueba) aplicarRol('dm', false);
+  else $('rol').classList.add('abierto');     // primera vez: se pregunta el rol
   console.log('Ajustes restaurados: ' + JSON.stringify(ajustes));
 })();
 
@@ -693,6 +816,19 @@ if (puente.prueba2d) {
       console.log('PRUEBA 2D armada (' + puente.prueba2d + ')');
     } catch (e) { console.error('PRUEBA 2D FALLÓ: ' + (e.stack || e)); }
   }, 2500);
+}
+
+// ---------- Prueba automática de sonidos (ROLCAM_PRUEBA_SONIDO) ----------
+if (puente.pruebaSonido) {
+  setTimeout(() => {
+    try {
+      $('dm').open = true;
+      for (const b of document.querySelectorAll('#dmAmbientes button:not(.vacio), #dmEfectos button:not(.vacio)')) b.click();
+      const activos = sonidos.listaAmbientes().filter((a) => sonidos.ambienteActivo(a.id)).length;
+      console.log('PRUEBA SONIDO: ambientes activos ' + activos + ' de ' + sonidos.listaAmbientes().length + ', efectos ' + sonidos.listaEfectos().length);
+      setTimeout(() => { $('dmSilencio').click(); console.log('PRUEBA SONIDO: silenciado, activos ' + sonidos.listaAmbientes().filter((a) => sonidos.ambienteActivo(a.id)).length); }, 2500);
+    } catch (e) { console.error('PRUEBA SONIDO FALLÓ: ' + (e.stack || e)); }
+  }, 3000);
 }
 
 // ---------- Prueba automática (ROLCAM_PRUEBA=1) ----------

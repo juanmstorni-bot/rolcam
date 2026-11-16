@@ -79,6 +79,27 @@ La app recuerda tu personaje, tu fondo y tus ajustes. Se guardan en
 En el panel se ven los fps de dibujo y de seguimiento. Los mensajes de error de las dos
 ventanas aparecen en la terminal donde corriste `npm start`.
 
+## Panel del Dungeon Master
+
+Al abrir RolCam por primera vez se elige **Jugador** o **Dungeon Master** (se cambia después
+en "Uso de RolCam"). Es el mismo programa; el jugador simplemente no ve este panel.
+
+El panel tiene dos listas:
+
+- **Ambientes**, que se repiten hasta apagarlos y se pueden combinar: lluvia, viento
+  fuerte, fogata, tormenta (con rayos y truenos) y tambores de guerra.
+- **Efectos**, que suenan una vez: trueno, campana y magia misteriosa.
+
+En cada lista, **+ Agregar** suma un archivo propio (MP3, WAV, OGG): en Ambientes se repite
+en bucle, en Efectos suena una vez. Con **Editar listas** se quita cualquier sonido, incluido
+o propio; los incluidos se recuperan con un botón.
+
+Los sonidos incluidos se generan por código, sin archivos de terceros. Su carácter se ajustó
+midiendo grabaciones de referencia (qué graves, qué ritmo, cuánto duran), sin copiarlas.
+
+Para que los jugadores los escuchen, el DM comparte la ventana de RolCam **con sonido** en
+Discord. Todavía no hay una "sala" que conecte los programas de la mesa (ver hoja de ruta).
+
 ## Cámara virtual propia
 
 RolCam trae su propia cámara virtual, para no depender de OBS. Aparece en Discord y otras
@@ -115,6 +136,7 @@ ubicación del componente. El panel de controles nunca sale en la cámara.
 | `preload.js` | Puente seguro entre las ventanas y el proceso principal |
 | `src/escenario.*` | Ventana visible: dibuja el personaje y convierte puntos en movimiento de huesos |
 | `src/importar.js` | Importa modelos `.glb` / `.fbx`: reconoce los huesos y arma el esqueleto normalizado |
+| `src/sonidos.js` | Sonidos del panel del Dungeon Master, generados por código |
 | `src/titere2d.js` | Personaje ilustrado 2.5D a partir de una imagen |
 | `src/seguimiento.*` | Ventana oculta: abre la webcam y corre MediaPipe en un proceso aparte |
 | `nativo/rolcam-camara.cpp` | Programa auxiliar que pasa los cuadros a la cámara virtual |
