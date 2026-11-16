@@ -48,8 +48,10 @@ npm run recursos
 npm start
 ```
 
-1. Se abre la ventana **RolCam — Escenario** con el personaje de ejemplo.
-2. Tocá **Activar cámara**.
+1. Se abre la **pantalla de inicio** (una mazmorra con antorchas, con sonido de ambiente).
+   Ahí elegís tu rol, **Jugador** o **Dungeon Master**, y después entrás a una sala o
+   tocás **Omitir por ahora**. El sonido se apaga con el botón de abajo a la derecha.
+2. Ya en el escenario, tocá **Activar cámara**.
 3. Para usar tu personaje, arrastrá a la ventana un archivo `.vrm`, `.glb` o `.fbx`.
    - `.vrm` es el formato más completo: incluye expresiones de cara (boca, parpadeo).
    - `.glb` y `.fbx` sirven si el modelo tiene esqueleto humanoide con nombres de hueso
@@ -163,6 +165,8 @@ ubicación del componente. El panel de controles nunca sale en la cámara.
 | `main.js` | Proceso principal de Electron: crea las dos ventanas y retransmite mensajes |
 | `preload.js` | Puente seguro entre las ventanas y el proceso principal |
 | `src/escenario.*` | Ventana visible: dibuja el personaje y convierte puntos en movimiento de huesos |
+| `src/inicio.js` | Pantalla de inicio: video de mazmorra en bucle (con un dibujo por código de respaldo), elección de rol y entrada a la sala |
+| `src/medios/mazmorra.webm` | Video de fondo de la pantalla de inicio, hecho por el autor del proyecto con Claude Opus 5.5 (VP9, sin audio; el sonido se genera aparte) |
 | `src/importar.js` | Importa modelos `.glb` / `.fbx`: reconoce los huesos y arma el esqueleto normalizado |
 | `src/sala.js` | Sala de la mesa: conexión directa entre el DM y los jugadores |
 | `src/sonidos.js` | Sonidos del panel del Dungeon Master, generados por código |

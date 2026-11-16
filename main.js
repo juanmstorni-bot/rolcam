@@ -84,7 +84,8 @@ app.whenReady().then(() => {
     const base = deUsuario ? carpetaDatos() : RAIZ;
     const ruta = path.normalize(path.join(base, deUsuario ? pedida.slice('/usuario'.length) : pedida));
     if (!ruta.startsWith(base)) return new Response('Fuera de la app', { status: 403 });
-    return net.fetch(pathToFileURL(ruta).toString()).catch(() => new Response('No encontrado', { status: 404 }));
+    // Se reenvían los encabezados (Range) para que los videos puedan saltar y repetirse.
+    return net.fetch(pathToFileURL(ruta).toString(), { headers: pedido.headers }).catch(() => new Response('No encontrado', { status: 404 }));
   });
 
   // Solo se concede el permiso de cámara, y solo a las páginas de la app.

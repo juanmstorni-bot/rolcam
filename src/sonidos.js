@@ -295,9 +295,119 @@ export function ponerAmbiente(id, encendido) { if (ambienteActivo(id) !== !!ence
 
 export function tocarEfecto(id) { asegurarContexto(); if (EFECTOS[id]) EFECTOS[id].tocar(salida, ctx.currentTime + 0.02); }
 
+// ---------- Ambiente de la pantalla de inicio ----------
+// Golpe de entrada: suena al elegir el rol. Tiene que sentirse grande y prohibido: un
+// estampido grave que cae, un gong oscuro de metal, el portazo, y una cola de eco larga
+// con dos notas graves que chocan entre sí.
+function golpeDeEntrada(destino, t) {
+  // Cola de eco: tres retardos que se realimentan.
+  const sala = ganancia(0.5, destino), opaco = filtro('lowpass', 2200, sala);
+  const r1 = ctx.createDelay(1), r2 = ctx.createDelay(1), r3 = ctx.createDelay(1), v1 = ctx.createGain(), v2 = ctx.createGain(), v3 = ctx.createGain();
+  r1.delayTime.value = 0.137; r2.delayTime.value = 0.251; r3.delayTime.value = 0.419; v1.gain.value = 0.6; v2.gain.value = 0.55; v3.gain.value = 0.5;
+  r1.connect(v1); v1.connect(r2); r2.connect(v2); v2.connect(r3); r3.connect(v3); v3.connect(r1);
+  r1.connect(opaco); r2.connect(opaco); r3.connect(opaco);
+  const seco = ganancia(1, destino); seco.connect(ganancia(0.5, r1));
+  // Estampido: un tono que cae de 95 a 30 Hz, más uno más grave todavía que dura más.
+  const g1 = ganancia(0, seco), o1 = tono('sine', 95, g1, t, 3.2);
+  o1.frequency.setValueAtTime(95, t); o1.frequency.exponentialRampToValueAtTime(30, t + 0.5);
+  golpeDeVolumen(g1.gain, t, 0.6, 0.004, 2.8);
+  const g1b = ganancia(0, seco), o1b = tono('triangle', 46, g1b, t, 3.6);
+  o1b.frequency.setValueAtTime(46, t); o1b.frequency.exponentialRampToValueAtTime(34, t + 2.5);
+  golpeDeVolumen(g1b.gain, t, 0.25, 0.01, 3.4);
+  // Portazo: ruido grave y corto, con un chasquido arriba para que el ataque se sienta.
+  const g2 = ganancia(0, seco); rafaga(ruidoMarron, filtro('lowpass', 1500, g2), t, 0.9); golpeDeVolumen(g2.gain, t, 1.6, 0.002, 0.5);
+  const g3 = ganancia(0, seco); rafaga(ruidoBlanco, filtro('bandpass', 1800, g3, 0.7), t, 0.2); golpeDeVolumen(g3.gain, t, 0.5, 0.001, 0.12);
+  // Gong: parciales que no son armónicos entre sí, graves y de caída lenta.
+  for (const [hz, nivel, caida] of [[73, 0.2, 4.2], [110.5, 0.2, 3.8], [163, 0.2, 3.4], [207, 0.17, 3], [311, 0.15, 2.6], [438, 0.12, 2.1], [587, 0.09, 1.7], [829, 0.06, 1.3], [1130, 0.04, 0.9]]) {
+    const g = ganancia(0, seco), o = tono('sine', hz, g, t, caida + 0.3);
+    o.frequency.setValueAtTime(hz * 1.012, t); o.frequency.exponentialRampToValueAtTime(hz, t + 0.25);     // el metal "afloja" apenas
+    golpeDeVolumen(g.gain, t, nivel, 0.003, caida);
+  }
+  // Dos notas graves casi pegadas (un semitono): quedan vibrando y dan la sensación de amenaza.
+  for (const hz of [55, 58.27]) {
+    const g = ganancia(0, seco), o = tono('sawtooth', hz, filtro('lowpass', 700, g), t, 4.3);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.13, t + 0.5); g.gain.exponentialRampToValueAtTime(0.0001, t + 4.2);
+    o.detune.value = azar(-6, 6);
+  }
+}
+// Toca el golpe de entrada con su propio volumen (no depende del volumen del panel).
+export function tocarEntrada(volumen = 0.9) {
+  asegurarContexto();
+  const nodo = ctx.createGain();
+  nodo.gain.value = volumen;
+  // Un limitador suave evita que el estampido sature en parlantes chicos.
+  const tope = ctx.createDynamicsCompressor();
+  tope.threshold.value = -8; tope.ratio.value = 8; tope.attack.value = 0.003; tope.release.value = 0.25;
+  nodo.connect(tope); tope.connect(ctx.destination);
+  golpeDeEntrada(nodo, ctx.currentTime + 0.02);
+  setTimeout(() => { nodo.disconnect(); tope.disconnect(); }, 9000);
+}
+// Un grito lejano: una voz que sube y cae, pasada por filtros de "garganta". Va a una sala
+// con mucho eco y muy bajito, para que se adivine más de lo que se escucha.
+function gritoLejano(destino, t) {
+  const grave = Math.random() < 0.4, dur = azar(1.3, 2.6);
+  const base = grave ? azar(170, 230) : azar(330, 460), pico = base * azar(1.5, 1.9);
+  const g = ganancia(0, destino);
+  const voz = ctx.createOscillator(); voz.type = 'sawtooth';
+  voz.frequency.setValueAtTime(base, t);
+  voz.frequency.exponentialRampToValueAtTime(pico, t + dur * 0.3);
+  voz.frequency.exponentialRampToValueAtTime(pico * 0.94, t + dur * 0.65);
+  voz.frequency.exponentialRampToValueAtTime(base * 0.8, t + dur);
+  const temblor = ctx.createGain(); temblor.gain.value = base * 0.025; temblor.connect(voz.frequency);
+  tono('sine', azar(5, 7), temblor, t, dur);
+  for (const [hz, q, nivel] of [[grave ? 650 : 950, 5, 1], [grave ? 1150 : 1500, 6, 0.6], [2700, 7, 0.25]]) voz.connect(filtro('bandpass', hz, ganancia(nivel, g), q));
+  rafaga(ruidoBlanco, filtro('bandpass', 1800, ganancia(0.05, g), 1.2), t, dur);     // aire en la voz
+  voz.start(t); voz.stop(t + dur + 0.05);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(azar(0.5, 1), t + dur * 0.25);
+  g.gain.setValueAtTime(azar(0.5, 1), t + dur * 0.6);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+}
+function armarInicio(d) {
+  // Antorcha cercana: el fuego "flamea" (sube y baja rápido) y chasquea de vez en cuando.
+  const g = ganancia(0.1, d), f1 = ruidoEnBucle(ruidoMarron, filtro('lowpass', 240, g));
+  const l1 = vaiven(g.gain, 0.9, 0.03), l2 = vaiven(g.gain, 3.7, 0.025), l3 = vaiven(g.gain, 7.9, 0.015);
+  const g2 = ganancia(0.03, d), f2 = ruidoEnBucle(ruidoBlanco, filtro('bandpass', 3600, g2, 0.5)), l4 = vaiven(g2.gain, 5.3, 0.008);
+  const gc = ganancia(0.55, d);
+  const pararChasquidos = programar(0.05, (t) => { chasquido(gc, t); return azar(0.04, 0.45); });
+  // Viento leve que corre por los pasillos, con un silbido que va y viene.
+  const gv = ganancia(0.07, d), fv = ruidoEnBucle(ruidoMarron, filtro('highpass', 60, filtro('lowpass', 360, gv, 0.5)));
+  const l5 = vaiven(gv.gain, 0.11, 0.032), l6 = vaiven(gv.gain, 0.043, 0.022);
+  const gs = ganancia(0.022, d), silbido = filtro('bandpass', 720, gs, 5), fs = ruidoEnBucle(ruidoBlanco, silbido);
+  const l7 = vaiven(silbido.frequency, 0.07, 230), l8 = vaiven(gs.gain, 0.13, 0.016);
+  // Gritos muy leves, al fondo: pasan por una sala de ecos largos y un filtro que los aleja.
+  const lejos = ganancia(0.07, d), opaco = filtro('lowpass', 1500, lejos);
+  const r1 = ctx.createDelay(1), r2 = ctx.createDelay(1), r3 = ctx.createDelay(1), v1 = ctx.createGain(), v2 = ctx.createGain(), v3 = ctx.createGain();
+  r1.delayTime.value = 0.211; r2.delayTime.value = 0.337; r3.delayTime.value = 0.523; v1.gain.value = 0.55; v2.gain.value = 0.5; v3.gain.value = 0.45;
+  r1.connect(v1); v1.connect(r2); r2.connect(v2); v2.connect(r3); r3.connect(v3); v3.connect(r1);
+  r1.connect(opaco); r2.connect(opaco); r3.connect(opaco);
+  const entrada = ganancia(1, r1); entrada.connect(ganancia(0.25, opaco));
+  const pararGritos = programar(azar(4, 7), (t) => { gritoLejano(entrada, t); return azar(8, 19); });
+  return () => {
+    [f1, f2, fv, fs, l1, l2, l3, l4, l5, l6, l7, l8].forEach((n) => n.stop());
+    pararChasquidos(); pararGritos(); setTimeout(() => entrada.disconnect(), 100);
+  };
+}
+// Enciende el ambiente de la pantalla de inicio. Va por su propio volumen (no depende del
+// volumen del panel) y devuelve cómo apagarlo, con salida suave.
+export function ambienteInicio(volumen = 0.8) {
+  asegurarContexto();
+  const nodo = ctx.createGain();
+  nodo.gain.value = 0; nodo.connect(ctx.destination);
+  nodo.gain.setTargetAtTime(volumen, ctx.currentTime, 0.9);
+  const apagar = armarInicio(nodo);
+  return () => {
+    nodo.gain.setTargetAtTime(0, ctx.currentTime, 0.35);
+    setTimeout(() => { try { apagar(); } catch {} nodo.disconnect(); }, 1800);
+  };
+}
+
 // Para las pruebas: deja sonando un ambiente o un efecto desde el instante 0, sin entrada suave.
 export function grabarParaPrueba(id) {
-  if (AMBIENTES[id]) AMBIENTES[id].armar(salida);
+  if (id === 'inicio') armarInicio(salida);
+  else if (id === 'entrada') golpeDeEntrada(salida, 0.05);
+  else if (id === 'gritos') { const e = ganancia(1, salida); programar(0.2, (t) => { gritoLejano(e, t); return 3; }); }
+  else if (AMBIENTES[id]) AMBIENTES[id].armar(salida);
   else EFECTOS[id].tocar(salida, 0.05);
 }
 

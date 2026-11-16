@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('puente', {
   consultar(canal, datos) { return CONSULTAS.includes(canal) ? ipcRenderer.invoke(canal, datos) : Promise.reject(new Error('Canal no permitido')); },
   pruebaCamara: !!process.env.ROLCAM_CAMARA_FALSA,
   pruebaSala: process.env.ROLCAM_PRUEBA_SALA || '',
+  pruebaInicio: !!process.env.ROLCAM_PRUEBA_INICIO,
   pruebaSonido: !!process.env.ROLCAM_PRUEBA_SONIDO,
   prueba2d: process.env.ROLCAM_PRUEBA_2D || '',
   prueba: process.env.ROLCAM_PRUEBA === '1',

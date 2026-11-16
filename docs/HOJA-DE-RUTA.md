@@ -64,6 +64,19 @@ Decisiones de diseño que conviene respetar:
    - **Sonidos incluidos por tipo de personaje** (hoy cada personaje tiene su botonera, pero
      solo con archivos que carga el DM).
    Hecho en la 1.4.0: vista del DM sin cámara ni personaje, y sonidos propios por personaje.
+   Hecho en la 1.5.0: pantalla de inicio (`src/inicio.js`): mazmorra animada en un lienzo 2D,
+   ambiente sonoro propio (`ambienteInicio` en `src/sonidos.js`: antorcha, viento leve y
+   gritos lejanos), elección de rol y entrada a la sala u omitir. Pendiente: ajustar de
+   oído los gritos lejanos, que se hicieron sin poder escucharlos. Se prueba sola con
+   `ROLCAM_PRUEBA=1 ROLCAM_PRUEBA_INICIO=1`.
+   Desde la 1.5.2 el fondo es un video que hizo Juan con Claude Opus 5.5 (`src/medios/mazmorra.webm`,
+   recodificado a VP9 a 1280×720 y oscurecido un 16 %; el original ya cierra el bucle solo);
+   el dibujo por código queda de respaldo. Los chasquidos del fuego se hicieron más
+   espaciados y apagados en la 1.5.2, pero a Juan le gustaba más como estaban: en la 1.5.3
+   volvieron a la versión original (va a pasar un audio de referencia para afinarlos).
+   1.5.3: al elegir el rol suena un golpe fuerte (`tocarEntrada` en `src/sonidos.js`) y la
+   imagen hace zoom con fundido a negro antes de mostrar el paso de conexión. Desde la 1.5.4
+   pasa lo mismo al omitir, crear sala o entrar a una (en estos dos, cuando la conexión sale bien).
 4. **Cambio de voz.** Empezar por cambio de tono simple. Bloqueante conocido: hace falta
    un micrófono virtual, y el más usado (VB-CABLE) no es open source.
 5. **Generar el personaje 3D desde una imagen.** Flujo: imagen → malla (TRELLIS o

@@ -6,6 +6,7 @@ import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import * as Kalidokit from 'kalidokit';
 import { cargarModeloGenerico } from './importar.js';
 import * as sonidos from './sonidos.js';
+import { abrirInicio, inicioAbierto } from './inicio.js';
 import { Sala, nuevoCodigo, limpiarCodigo, MESA_VACIA } from './sala.js';
 import { Titere2D, marcadoresPorDefecto, quitarFondoLiso, tieneTransparencia } from './titere2d.js';
 
@@ -571,7 +572,11 @@ async function usarFondo(archivo) {
 $('fondoImagen').addEventListener('change', (e) => { if (e.target.files[0]) usarFondo(e.target.files[0]); });
 $('quitarFondo').addEventListener('click', () => { quitarFondoImagen(); $('fondoImagen').value = ''; guardar({ fondoImagen: null }); });
 $('personajeEjemplo').addEventListener('click', () => { cargarVRM('/recursos/muestra.vrm', 'personaje de ejemplo'); guardar({ tipoPersonaje: 'vrm', personaje: null }); });
-window.addEventListener('keydown', (e) => { if (e.key === 'h' || e.key === 'H') document.body.classList.toggle('limpio'); });
+window.addEventListener('keydown', (e) => {
+  // No cuenta mientras se escribe en una casilla (un nombre con "h" escondía el panel).
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || inicioAbierto()) return;
+  if (e.key === 'h' || e.key === 'H') document.body.classList.toggle('limpio');
+});
 
 // ---------- Cámara virtual ----------
 // Cada cuadro dibujado se copia a un lienzo de tamaño fijo (recortando lo que sobra)
@@ -854,7 +859,7 @@ function estadoDeSala(conectada) {
 
 async function entrarSala(codigo, opciones) {
   codigo = limpiarCodigo(codigo);
-  if (codigo.length < 4) { $('salaEstado').textContent = 'El código tiene que tener al menos 4 letras o números.'; return; }
+  if (codigo.length < 4) { $('salaEstado').textContent = 'El código tiene que tener al menos 4 letras o números.'; return false; }
   $('salaCodigo').value = codigo;
   $('salaEstado').textContent = 'Conectando…';
   estadoDeSala(true);
@@ -877,10 +882,12 @@ async function entrarSala(codigo, opciones) {
     }
     estadoDeSala(true);
     pintarGente(sala.gente());
+    return true;
   } catch (e) {
     console.error('No se pudo entrar a la sala: ' + (e.stack || e.message || e));
     $('salaEstado').textContent = 'No se pudo conectar. Revisá tu conexión a internet y probá de nuevo.';
     estadoDeSala(false);
+    return false;
   }
 }
 async function salirDeSala() {
@@ -926,18 +933,36 @@ function aplicarRol(rol, recordar) {
   $('rolSelector').value = rol === 'dm' ? 'dm' : 'jugador';
   if (rol === 'dm') $('dm').open = true;
   aplicarVistaDM();
-  $('rol').classList.remove('abierto');
   if (recordar) guardar({ rol });
 }
 $('dmConCamara').addEventListener('change', () => { aplicarVistaDM(); guardar({ dmConCamara: $('dmConCamara').checked }); });
-$('rolJugador').addEventListener('click', () => aplicarRol('jugador', true));
-$('rolDM').addEventListener('click', () => aplicarRol('dm', true));
+
+// ---------- Pantalla de inicio ----------
+// Al abrir el programa se elige el rol y se entra a una sala (o se omite). Mientras está
+// abierta, el escenario 3D no se dibuja: en una PC modesta no conviene pintar dos cosas.
+function mostrarInicio() {
+  abrirInicio({
+    nombre: $('salaJugador').value, personaje: $('salaPersonaje').value, codigo: $('salaCodigo').value,
+    conSonido: ajustes.sonidoInicio !== false,
+    alElegirRol: (rol) => aplicarRol(rol, true),
+    alCambiarSonido: (encendido) => guardar({ sonidoInicio: encendido }),
+    alConectar: async ({ crear, nombre, personaje, codigo }) => {
+      $('salaJugador').value = nombre;
+      if (rolActual() === 'jugador') $('salaPersonaje').value = personaje;
+      const bien = await entrarSala(crear ? nuevoCodigo() : codigo);
+      return bien ? '' : $('salaEstado').textContent;
+    },
+    alTerminar: () => { tAnterior = performance.now(); },
+  });
+}
+$('volverInicio').addEventListener('click', async () => { if (sala.conectada) await salirDeSala(); mostrarInicio(); });
 $('rolSelector').addEventListener('change', async (e) => { if (sala.conectada) await salirDeSala(); aplicarRol(e.target.value, true); });
 
 // ---------- Bucle de dibujo ----------
 let tAnterior = performance.now();
 function bucle() {
   requestAnimationFrame(bucle);
+  if (inicioAbierto()) return;
   const tAhora = performance.now();
   const dt = Math.min((tAhora - tAnterior) / 1000, 0.25);
   tAnterior = tAhora;
@@ -964,13 +989,13 @@ function bucle() {
 bucle();
 
 // ---------- Arrastrar y soltar un personaje ----------
-window.addEventListener('dragover', (e) => { e.preventDefault(); $('soltar').style.display = 'flex'; });
+window.addEventListener('dragover', (e) => { e.preventDefault(); if (!inicioAbierto()) $('soltar').style.display = 'flex'; });
 window.addEventListener('dragleave', () => { $('soltar').style.display = 'none'; });
 window.addEventListener('drop', (e) => {
   e.preventDefault();
   $('soltar').style.display = 'none';
   const archivo = e.dataTransfer.files[0];
-  if (!archivo) return;
+  if (!archivo || inicioAbierto()) return;
   if (archivo.type.startsWith('image/')) preguntarUso(archivo); else usarPersonaje(archivo);
 });
 
@@ -997,9 +1022,11 @@ window.addEventListener('drop', (e) => {
   restaurarSonidos();
   if (ajustes.sala) { $('salaJugador').value = ajustes.sala.jugador || ''; $('salaPersonaje').value = ajustes.sala.personaje || ''; $('salaCodigo').value = ajustes.sala.codigo || ''; }
   $('dmConCamara').checked = !!ajustes.dmConCamara || (puente.prueba && !puente.pruebaSala);
-  if (ajustes.rol) aplicarRol(ajustes.rol, false);
+  if (ajustes.rol && !puente.pruebaSala) aplicarRol(ajustes.rol, false);
   else if (puente.prueba) aplicarRol(location.search.includes('jugador') ? 'jugador' : 'dm', false);
-  else $('rol').classList.add('abierto');     // primera vez: se pregunta el rol
+  // Las pruebas automáticas saltean la pantalla de inicio, salvo la que la prueba a ella.
+  if (puente.prueba && !puente.pruebaInicio) document.body.classList.remove('en-inicio'), $('inicio').hidden = true;
+  else mostrarInicio();
   console.log('Ajustes restaurados: ' + JSON.stringify(ajustes));
 })();
 
@@ -1053,6 +1080,17 @@ if (puente.pruebaSala) {
       }, 500);
     } catch (e) { console.error('PRUEBA SALA FALLÓ: ' + (e.stack || e)); }
   }, 3000);
+}
+
+// ---------- Prueba automática de la pantalla de inicio (ROLCAM_PRUEBA_INICIO) ----------
+if (puente.pruebaInicio) {
+  const v = $('inicioVideo'); let vueltas = 0, antes = 0;
+  v.addEventListener('timeupdate', () => { if (v.currentTime < antes) console.log('INICIO video: vuelta ' + (++vueltas)); antes = v.currentTime; });
+  setTimeout(() => { console.log('INICIO video visible: ' + !v.hidden + ', ' + v.videoWidth + 'x' + v.videoHeight + ', t=' + v.currentTime.toFixed(1)); console.log('INICIO abierta: ' + inicioAbierto()); $('inicioDM').click(); console.log('INICIO rol: ' + rolActual()); }, 6000);
+  setTimeout(() => { console.log('INICIO paso sala visible: ' + !$('inicioSala').hidden); $('inicioVolver').click(); $('inicioJugador').click(); console.log('INICIO rol: ' + rolActual()); }, 9000);
+  setTimeout(() => { $('inicioCodigo').value = 'ab'; $('inicioEntrar').click(); }, 11500);
+  setTimeout(() => { console.log('INICIO aviso: ' + $('inicioAviso').textContent); $('inicioOmitir').click(); }, 12500);
+  setTimeout(() => console.log('INICIO abierta: ' + inicioAbierto() + ', oculta: ' + $('inicio').hidden + ', panel: ' + getComputedStyle($('panel')).display), 15500);
 }
 
 // ---------- Prueba automática de sonidos (ROLCAM_PRUEBA_SONIDO) ----------

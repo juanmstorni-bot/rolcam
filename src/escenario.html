@@ -31,9 +31,8 @@
   #estado { margin: 8px 0; color: #b9bdc9; min-height: 2.8em; }
   #medidas { font-variant-numeric: tabular-nums; color: #9fe3a8; white-space: pre; }
   #soltar { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(91,124,250,.25); font-size: 22px; pointer-events: none; }
-  #elegir, #editor, #rol { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(12,13,18,.92); z-index: 10; gap: 24px; }
-  #elegir.abierto, #editor.abierto, #rol.abierto { display: flex; }
-  #rol button { font: inherit; padding: 9px 14px; border-radius: 8px; border: 1px solid #5b7cfa; background: #5b7cfa; color: #fff; cursor: pointer; }
+  #elegir, #editor { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(12,13,18,.92); z-index: 10; gap: 24px; }
+  #elegir.abierto, #editor.abierto { display: flex; }
   body.rol-jugador #dm, body.rol-jugador .soloDM { display: none !important; }
   body:not(.rol-jugador) .soloJugador { display: none !important; }
   body.sin-camara .parteCamara { display: none !important; }
@@ -67,6 +66,49 @@
   .muestra.ojo { background: #6fd3ff; } .muestra.boca { background: #ff8fb3; }
   small { color: #8b90a0; display: block; margin-top: 6px; }
   body.limpio #panel { display: none; }
+
+  /* Pantalla de inicio */
+  body.en-inicio #panel, body.en-inicio #hud { display: none !important; }
+  #inicio { position: fixed; inset: 0; z-index: 20; background: #000; color: #eadfc8; font-family: Georgia, 'Palatino Linotype', 'Book Antiqua', serif; transition: opacity .6s; }
+  #inicio[hidden] { display: none; }
+  #inicioVideo[hidden] { display: none; }
+  #inicio.saliendo { opacity: 0; pointer-events: none; }
+  #inicioLienzo, #inicioVideo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  /* Al elegir el rol: la cámara se mete en el pasillo y todo se funde a negro. */
+  #inicio.entrando #inicioLienzo, #inicio.entrando #inicioVideo { transform: scale(2.4); transition: transform 1.7s cubic-bezier(.55,0,.9,.4); }
+  #inicioNegro { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity .7s; }
+  #inicio.entrando #inicioNegro { opacity: 1; transition: opacity 1.3s ease-in .35s; }
+  #inicio.entrando #inicioCapa { opacity: 0; pointer-events: none; }
+  #inicioSonido, #inicioVersion { transition: opacity .35s; }
+  #inicio.entrando #inicioSonido, #inicio.entrando #inicioVersion { opacity: 0; pointer-events: none; }
+  #inicioCapa { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; box-sizing: border-box; background: radial-gradient(ellipse at 50% 50%, rgba(0,0,0,.45), rgba(0,0,0,0) 62%); transition: opacity .35s; }
+  #inicio h1 { font-size: clamp(44px, 9vh, 84px); font-weight: 400; letter-spacing: .14em; margin: 0; color: #f3d9a4; text-shadow: 0 0 22px rgba(255,140,40,.65), 0 2px 3px #000; }
+  #inicio .lema { margin: 2px 0 26px; letter-spacing: .28em; text-transform: uppercase; font-size: 12px; color: #c9b48d; text-shadow: 0 1px 2px #000; }
+  #inicio .paso { width: min(560px, 92vw); background: rgba(12,10,9,.78); border: 1px solid #6b5333; border-radius: 6px; padding: 20px 22px; box-sizing: border-box; box-shadow: 0 0 0 1px #000, 0 12px 40px rgba(0,0,0,.7); }
+  #inicio .paso[hidden] { display: none; }
+  #inicio .pregunta { margin: 0 0 14px; text-align: center; font-size: 18px; color: #f0e2c4; }
+  #inicio .roles { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  #inicio button { font: inherit; cursor: pointer; color: #f3e6c8; }
+  #inicio .roles button { background: linear-gradient(#2a211a, #17120e); border: 1px solid #8a6a3c; border-radius: 6px; padding: 18px 12px; display: grid; gap: 8px; transition: border-color .15s, box-shadow .15s, transform .15s; }
+  #inicio .roles button b { font-size: 20px; font-weight: 400; color: #f6d28a; letter-spacing: .04em; }
+  #inicio .roles button span { font: 13px/1.35 system-ui, sans-serif; color: #c9bda6; }
+  #inicio .roles button:hover, #inicio .roles button:focus-visible { border-color: #ffb650; box-shadow: 0 0 18px rgba(255,140,40,.45); transform: translateY(-2px); outline: none; }
+  #inicioSala label { display: block; margin: 0 0 10px; font: 13px/1.4 system-ui, sans-serif; color: #c9bda6; }
+  #inicioSala label[hidden] { display: none; }
+  #inicioSala input { display: block; width: 100%; box-sizing: border-box; margin-top: 4px; font: 15px system-ui, sans-serif; background: #0e0c0b; color: #f3e6c8; border: 1px solid #5a4630; border-radius: 4px; padding: 8px 10px; }
+  #inicioSala input:focus { outline: none; border-color: #ffb650; }
+  #inicioCodigo { letter-spacing: 3px; text-transform: uppercase; }
+  #inicio button.principal { display: block; width: 100%; margin-top: 6px; padding: 11px; font-size: 17px; background: linear-gradient(#a8621c, #7a3f0e); border: 1px solid #e0a050; border-radius: 5px; color: #fff3da; }
+  #inicio button.principal[hidden] { display: none; }
+  #inicio button.principal:hover { background: linear-gradient(#c0741f, #8c4a10); }
+  #inicio button.plano { background: transparent; border: 1px solid transparent; border-radius: 5px; padding: 8px 10px; font: 14px system-ui, sans-serif; color: #d9c7a3; }
+  #inicio #inicioEntrar.plano { display: block; width: 100%; margin-top: 6px; border-color: #6b5333; }
+  #inicio button.plano:hover { color: #ffcf80; }
+  #inicio button:disabled { opacity: .5; cursor: default; }
+  #inicioAviso { min-height: 1.4em; margin-top: 10px; text-align: center; font: 13px system-ui, sans-serif; color: #ffb38a; }
+  #inicio .pie { display: flex; justify-content: space-between; margin-top: 6px; }
+  #inicioSonido { position: absolute; right: 16px; bottom: 14px; background: rgba(12,10,9,.7); border: 1px solid #5a4630; border-radius: 999px; padding: 6px 14px; font: 13px system-ui, sans-serif; }
+  #inicioVersion { position: absolute; left: 16px; bottom: 18px; font: 12px system-ui, sans-serif; color: #8d806b; }
 </style>
 <script type="importmap">
 {
@@ -80,7 +122,7 @@
 }
 </script>
 </head>
-<body>
+<body class="en-inicio">
 <canvas id="lienzo"></canvas>
 <div id="hud"></div>
 <div id="soltar">Soltá el personaje (.vrm, .glb, .fbx) o una imagen</div>
@@ -118,13 +160,38 @@
   </div>
 </div>
 
-<div id="rol">
-  <div class="caja">
-    <p>¿Cómo vas a usar RolCam?</p>
-    <button id="rolJugador">Soy jugador</button>
-    <button id="rolDM">Soy Dungeon Master</button>
-    <small>Se puede cambiar después desde el panel.</small>
+<div id="inicio">
+  <canvas id="inicioLienzo" width="960" height="540"></canvas>
+  <video id="inicioVideo" src="./medios/mazmorra.webm" muted loop playsinline preload="auto" hidden></video>
+  <div id="inicioNegro"></div>
+  <div id="inicioCapa">
+    <div style="text-align:center">
+      <h1>RolCam</h1>
+      <p class="lema">Tu personaje, en tu cámara</p>
+    </div>
+    <div id="inicioRol" class="paso">
+      <p class="pregunta">¿Quién entra a la mazmorra?</p>
+      <div class="roles">
+        <button id="inicioJugador"><b>Jugador</b><span>Aparecés en cámara con tu personaje.</span></button>
+        <button id="inicioDM"><b>Dungeon Master</b><span>Dirigís la mesa: sonidos, fondo y puntos de vida.</span></button>
+      </div>
+    </div>
+    <div id="inicioSala" class="paso" hidden>
+      <p class="pregunta" id="inicioTitulo"></p>
+      <label>Tu nombre <input id="inicioNombre" type="text" maxlength="30"></label>
+      <label id="inicioFilaPersonaje">Nombre de tu personaje <input id="inicioPersonaje" type="text" maxlength="30"></label>
+      <button id="inicioCrear" class="principal">Crear sala nueva</button>
+      <label style="margin-top:12px"><span id="inicioRotuloCodigo">Código de la sala</span> <input id="inicioCodigo" type="text" maxlength="12" autocomplete="off"></label>
+      <button id="inicioEntrar" class="principal">Entrar a la sala</button>
+      <div id="inicioAviso"></div>
+      <div class="pie">
+        <button id="inicioVolver" class="plano">← Cambiar de rol</button>
+        <button id="inicioOmitir" class="plano">Omitir por ahora →</button>
+      </div>
+    </div>
   </div>
+  <span id="inicioVersion">Código abierto · GPL-3.0</span>
+  <button id="inicioSonido">Sonido: sí</button>
 </div>
 
 <div id="panel">
@@ -196,6 +263,7 @@
   <button id="personajeEjemplo" class="secundario parteCamara">Volver al personaje de ejemplo</button>
   <label class="parteCamara"><input id="pausa" type="checkbox"> Pausar seguimiento</label>
   <small>Arrastrá a la ventana un personaje 3D (.vrm, .glb o .fbx) o una imagen (fondo o personaje ilustrado). La app los recuerda.</small>
+  <button id="volverInicio" class="secundario">Volver a la pantalla de inicio</button>
   <small>Tecla H: ocultar o mostrar este panel. El panel nunca sale en la cámara virtual.</small>
 </div>
 
