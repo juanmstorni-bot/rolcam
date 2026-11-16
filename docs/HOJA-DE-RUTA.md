@@ -22,6 +22,7 @@ suficiente para que cualquier persona (o asistente) pueda retomar el desarrollo.
 | Escenario | `src/escenario.js` | Dibujo (three.js), solver de brazos/torso/manos, filtros, interfaz |
 | Seguimiento | `src/seguimiento.js` | Ventana oculta: webcam + MediaPipe en otro proceso |
 | Importador | `src/importar.js` | GLB/FBX: mapeo de huesos por nombre, pose en T, esqueleto normalizado |
+| Sala | `src/sala.js` | Conexión directa DM–jugadores con código; estado compartido y archivos a pedido |
 | Sonidos del DM | `src/sonidos.js` | Ambientes y efectos sintetizados; ocho casilleros de audio propio |
 | Personaje 2.5D | `src/titere2d.js` | Malla con relieve + shader de boca y párpados |
 | Cámara virtual | `nativo/rolcam-camara.cpp` | Recibe cuadros RGBA por stdin y los pasa a Softcam |
@@ -49,20 +50,20 @@ Decisiones de diseño que conviene respetar:
 2. **Firma digital del instalador.** Desde la 1.1.0 el instalador registra la cámara
    virtual al instalar y la quita al desinstalar (`instalador/camara.nsh`); falta la
    firma para evitar el aviso de "editor desconocido" de Windows.
-3. **Sala del Dungeon Master.** Desde la 1.2.0 hay un panel local de sonidos
-   (`src/sonidos.js`: ambientes y efectos generados con Web Audio, más archivos propios)
-   que los jugadores oyen si el DM comparte la ventana con sonido. Lo que falta requiere una "sala": las apps de la mesa conectadas por
-   un código. El DM cambia el fondo de todos y dispara sonidos que suenan en la app de
-   cada jugador. Decisión abierta: conexión directa entre jugadores (WebRTC, sin
-   servidor propio) o servidor mínimo de retransmisión.
+3. **Sala de la mesa (hecha en la 1.3.0, falta probarla entre redes distintas).**
+   `src/sala.js` usa Trystero (WebRTC + relés Nostr públicos, sin servidor propio). Viajan:
+   el perfil de cada uno, el estado "mesa" que fija el DM (ambientes, fondo, vidas), los
+   efectos y los archivos que el DM entrega a pedido. Probado de punta a punta con dos
+   ventanas y un relé local; sin probar con los relés públicos ni entre dos redes reales.
+   No hay servidor TURN, así que en redes muy cerradas puede no conectar. Cualquiera en la
+   sala podría escribir el estado "mesa": si hace falta, restringirlo con el sistema de
+   roles de Trystero.
    Ideas ya pedidas para esa etapa:
-   - **Modo Dungeon Master sin cámara.** El DM no es un personaje: su versión no necesita
-     seguimiento ni cámara virtual, solo el panel de dirección. Hoy el rol (jugador / DM)
-     solo oculta o muestra el panel de sonidos; falta separar del todo las dos vistas.
-   - **Personajes de la mesa en el panel del DM**, con nombre del jugador, nombre del
-     personaje y puntos de vida, y la posibilidad de cambiarles el fondo.
-   - **Sonidos por personaje.** Debajo de cada personaje, su propia botonera: un mago con
-     hechizos y portales, un guerrero con desenvainar y golpes de espada, etc.
+   - **Ver a los personajes en el panel del DM** (su imagen en vivo, no solo la lista con
+     nombre y vida). Trystero permite enviar video entre participantes (`room.addStream`).
+   - **Sonidos incluidos por tipo de personaje** (hoy cada personaje tiene su botonera, pero
+     solo con archivos que carga el DM).
+   Hecho en la 1.4.0: vista del DM sin cámara ni personaje, y sonidos propios por personaje.
 4. **Cambio de voz.** Empezar por cambio de tono simple. Bloqueante conocido: hace falta
    un micrófono virtual, y el más usado (VB-CABLE) no es open source.
 5. **Generar el personaje 3D desde una imagen.** Flujo: imagen → malla (TRELLIS o
@@ -83,3 +84,5 @@ Variables de entorno para pruebas automáticas (ver `main.js` y el final de
 `src/escenario.js`): `ROLCAM_PRUEBA=1` arranca, inyecta un cuadro sintético y cierra;
 `ROLCAM_CAPTURA=archivo.png` guarda una captura; `ROLCAM_PRUEBA_2D=frente|girado` prueba
 el personaje 2.5D; `ROLCAM_CAMARA_FALSA=archivo.ppm` prueba la captura de la cámara virtual.
+`ROLCAM_PRUEBA_SALA=ws://localhost:7777` abre una segunda ventana como jugador y prueba la
+sala contra un relé Nostr local (hay que levantar uno aparte).

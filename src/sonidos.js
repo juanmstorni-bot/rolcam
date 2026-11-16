@@ -290,6 +290,9 @@ export function alternarAmbiente(id) {
   return true;
 }
 
+// Deja un ambiente encendido o apagado (para obedecer a la sala, sin alternar).
+export function ponerAmbiente(id, encendido) { if (ambienteActivo(id) !== !!encendido) alternarAmbiente(id); }
+
 export function tocarEfecto(id) { asegurarContexto(); if (EFECTOS[id]) EFECTOS[id].tocar(salida, ctx.currentTime + 0.02); }
 
 // Para las pruebas: deja sonando un ambiente o un efecto desde el instante 0, sin entrada suave.
@@ -326,6 +329,14 @@ export function alternarPropio(clave, enBucle, alTerminar) {
   p.fuente = f;
   return true;
 }
+
+// Deja un sonido propio sonando o detenido. Si ya sonaba y se pide tocar un efecto, lo reinicia.
+export function ponerPropio(clave, encendido, enBucle) {
+  if (!propios.has(clave)) return;
+  if (propioSonando(clave)) { if (encendido && enBucle) return; detenerPropio(clave); }
+  if (encendido) alternarPropio(clave, enBucle);
+}
+export const tienePropio = (clave) => propios.has(clave);
 
 export function silenciarTodo() {
   for (const id of [...activos.keys()]) alternarAmbiente(id);

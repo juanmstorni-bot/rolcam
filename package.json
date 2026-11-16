@@ -1,6 +1,6 @@
 {
   "name": "rolcam",
-  "version": "1.2.0",
+  "version": "1.4.0",
   "description": "Avatar de personaje por cámara para partidas de rol online",
   "main": "main.js",
   "license": "GPL-3.0-or-later",
@@ -14,10 +14,12 @@
     "@mediapipe/tasks-vision": "1.2.2",
     "@pixiv/three-vrm": "3.5.5",
     "kalidokit": "1.1.5",
-    "three": "0.187.0"
+    "three": "0.187.0",
+    "trystero": "^0.27.0"
   },
   "devDependencies": {
-    "electron": "^45.3.0"
+    "electron": "^45.3.0",
+    "esbuild": "^0.28.2"
   },
   "author": "juanmstorni-bot",
   "build": {

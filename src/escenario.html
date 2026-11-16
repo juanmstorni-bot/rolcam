@@ -34,7 +34,20 @@
   #elegir, #editor, #rol { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(12,13,18,.92); z-index: 10; gap: 24px; }
   #elegir.abierto, #editor.abierto, #rol.abierto { display: flex; }
   #rol button { font: inherit; padding: 9px 14px; border-radius: 8px; border: 1px solid #5b7cfa; background: #5b7cfa; color: #fff; cursor: pointer; }
-  body.rol-jugador #dm { display: none; }
+  body.rol-jugador #dm, body.rol-jugador .soloDM { display: none !important; }
+  body:not(.rol-jugador) .soloJugador { display: none !important; }
+  body.sin-camara .parteCamara { display: none !important; }
+  #panel input[type=text], #panel input[type=number] { font: inherit; background: #1d2230; color: #e8e8ea; border: 1px solid #3d4560; border-radius: 6px; padding: 5px 7px; }
+  #panel input[type=text] { width: 100%; box-sizing: border-box; margin-top: 3px; }
+  #salaCodigo { letter-spacing: 2px; text-transform: uppercase; }
+  #salaEstado, #salaVida { color: #b9bdc9; margin: 6px 0; }
+  #salaVida { color: #ffb3c0; font-weight: 600; }
+  .persona { border-top: 1px solid #343846; padding: 6px 0; }
+  .persona .quien { display: block; }
+  .persona .quien b { color: #e8e8ea; }
+  .persona input[type=number] { width: 56px; }
+  #hud { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); background: rgba(20,22,28,.8); border: 1px solid #343846; border-radius: 999px; padding: 6px 16px; display: none; }
+  #hud b { color: #ffb3c0; }
   #panel .grilla button.quitar { border-color: #c0566a; color: #ffb3c0; }
   .caja { background: #1b1e27; border: 1px solid #343846; border-radius: 12px; padding: 20px; display: grid; gap: 10px; min-width: 260px; }
   .caja p { margin: 0 0 4px; }
@@ -61,13 +74,15 @@
     "three": "/node_modules/three/build/three.module.js",
     "three/addons/": "/src/vendor/three-addons/",
     "@pixiv/three-vrm": "/node_modules/@pixiv/three-vrm/lib/three-vrm.module.min.js",
-    "kalidokit": "/node_modules/kalidokit/dist/kalidokit.es.js"
+    "kalidokit": "/node_modules/kalidokit/dist/kalidokit.es.js",
+    "trystero": "/src/vendor/trystero.js"
   }
 }
 </script>
 </head>
 <body>
 <canvas id="lienzo"></canvas>
+<div id="hud"></div>
 <div id="soltar">Soltá el personaje (.vrm, .glb, .fbx) o una imagen</div>
 
 <div id="elegir">
@@ -114,10 +129,10 @@
 
 <div id="panel">
   <h1>RolCam</h1>
-  <button id="iniciar">Activar cámara</button>
+  <button id="iniciar" class="parteCamara">Activar cámara</button>
   <div id="estado">Cargando personaje de ejemplo…</div>
-  <div id="medidas"></div>
-  <fieldset>
+  <div id="medidas" class="parteCamara"></div>
+  <fieldset class="parteCamara">
     <legend>Cámara virtual</legend>
     <button id="camBoton">Iniciar cámara virtual</button>
     <div id="camEstado">Apagada.</div>
@@ -129,6 +144,20 @@
     </label>
     <button id="camInstalar" class="secundario">Instalar cámara virtual en Windows</button>
     <button id="camDesinstalar" class="secundario">Desinstalar cámara virtual</button>
+  </fieldset>
+  <fieldset id="salaCaja">
+    <legend>Sala de la mesa</legend>
+    <label>Tu nombre <input id="salaJugador" type="text" maxlength="30"></label>
+    <label class="soloJugador">Tu personaje <input id="salaPersonaje" type="text" maxlength="30"></label>
+    <label>Código de la sala <input id="salaCodigo" type="text" maxlength="12" autocomplete="off"></label>
+    <button id="salaCrear" class="soloDM">Crear sala nueva</button>
+    <button id="salaUnirse" class="secundario">Entrar con ese código</button>
+    <button id="salaSalir" class="secundario" hidden>Salir de la sala</button>
+    <div id="salaEstado">Sin conectar.</div>
+    <div id="salaVida" class="soloJugador" hidden></div>
+    <label class="soloJugador">Volumen de los sonidos de la sala <input id="salaVolumen" type="range" min="0" max="1" step="0.05" value="0.8"></label>
+    <div id="salaGente"></div>
+    <button id="salaFondo" class="secundario soloDM" hidden>Poner mi fondo a toda la mesa</button>
   </fieldset>
   <details id="dm">
     <summary>Panel del Dungeon Master</summary>
@@ -144,29 +173,30 @@
     <small>Con "+ Agregar" sumás tus propios archivos (MP3, WAV, OGG) a cada lista.</small>
     <small>Para que los jugadores escuchen: en Discord, compartí la ventana de RolCam con sonido.</small>
   </details>
+  <label class="soloDM"><input id="dmConCamara" type="checkbox"> Usar también cámara y personaje</label>
   <label>Uso de RolCam
     <select id="rolSelector">
       <option value="jugador">Jugador</option>
       <option value="dm">Dungeon Master</option>
     </select>
   </label>
-  <label>Modo de seguimiento
+  <label class="parteCamara">Modo de seguimiento
     <select id="modo">
       <option value="completo">Completo: cuerpo, cara y manos</option>
       <option value="liviano">Liviano: cuerpo y cara, sin dedos</option>
     </select>
   </label>
-  <label>Filtro anti-temblor <input id="temblor" type="range" min="0" max="1" step="0.05" value="0.8"></label>
-  <label>Suavizado <input id="suavizado" type="range" min="0" max="1" step="0.05" value="0.6"></label>
+  <label class="parteCamara">Filtro anti-temblor <input id="temblor" type="range" min="0" max="1" step="0.05" value="0.8"></label>
+  <label class="parteCamara">Suavizado <input id="suavizado" type="range" min="0" max="1" step="0.05" value="0.6"></label>
   <label>Color de fondo <input id="fondo" type="color" value="#1d2230"></label>
   <label>Imagen de fondo <input id="fondoImagen" type="file" accept="image/png,image/jpeg,image/webp"></label>
   <button id="quitarFondo" class="secundario">Quitar imagen de fondo</button>
-  <label>Personaje desde una imagen <input id="imagenPersonaje" type="file" accept="image/png,image/jpeg,image/webp"></label>
-  <button id="editarTitere" class="secundario" hidden>Ajustar marcadores del personaje</button>
-  <button id="personajeEjemplo" class="secundario">Volver al personaje de ejemplo</button>
-  <label><input id="pausa" type="checkbox"> Pausar seguimiento</label>
+  <label class="parteCamara">Personaje desde una imagen <input id="imagenPersonaje" type="file" accept="image/png,image/jpeg,image/webp"></label>
+  <button id="editarTitere" class="secundario parteCamara" hidden>Ajustar marcadores del personaje</button>
+  <button id="personajeEjemplo" class="secundario parteCamara">Volver al personaje de ejemplo</button>
+  <label class="parteCamara"><input id="pausa" type="checkbox"> Pausar seguimiento</label>
   <small>Arrastrá a la ventana un personaje 3D (.vrm, .glb o .fbx) o una imagen (fondo o personaje ilustrado). La app los recuerda.</small>
-  <small>Tecla H: ocultar o mostrar este panel (ocultalo antes de capturar la ventana).</small>
+  <small>Tecla H: ocultar o mostrar este panel. El panel nunca sale en la cámara virtual.</small>
 </div>
 
 <script type="module" src="./escenario.js"></script>

@@ -6,6 +6,7 @@ import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import * as Kalidokit from 'kalidokit';
 import { cargarModeloGenerico } from './importar.js';
 import * as sonidos from './sonidos.js';
+import { Sala, nuevoCodigo, limpiarCodigo, MESA_VACIA } from './sala.js';
 import { Titere2D, marcadoresPorDefecto, quitarFondoLiso, tieneTransparencia } from './titere2d.js';
 
 const puente = window.puente;
@@ -621,6 +622,7 @@ const clavePropio = (n) => 'p' + n;
 
 function datosDM() {
   if (!ajustes.dm) ajustes.dm = { ocultos: { ambientes: [], efectos: [] }, propios: [], siguiente: 1 };
+  if (!ajustes.dm.personajes) ajustes.dm.personajes = {};     // nombre del personaje -> sus sonidos
   // Versión anterior: ocho casilleros sueltos. Pasan a la lista de efectos.
   if (ajustes.sonidos) {
     for (const [n, nombre] of Object.entries(ajustes.sonidos)) ajustes.dm.propios.push({ n: Number(n), nombre, seccion: 'efectos' });
@@ -650,18 +652,20 @@ function pintarDM() {
       agregar(s.nombre, activo ? 'activo' : '', (b) => {
         if ($('dmEditar').checked) {
           if (sonidos.ambienteActivo(s.id)) sonidos.alternarAmbiente(s.id);
-          dm.ocultos[seccion].push(s.id); guardar(); pintarDM();
-        } else if (seccion === 'ambientes') b.classList.toggle('activo', sonidos.alternarAmbiente(s.id));
-        else sonidos.tocarEfecto(s.id);
+          dm.ocultos[seccion].push(s.id); guardar(); pintarDM(); publicarSonidos();
+        } else if (seccion === 'ambientes') { b.classList.toggle('activo', sonidos.alternarAmbiente(s.id)); publicarSonidos(); }
+        else { sonidos.tocarEfecto(s.id); sala.enviarEfecto({ id: s.id }); }
       });
     }
     for (const p of dm.propios.filter((x) => x.seccion === seccion)) {
       agregar(p.nombre, sonidos.propioSonando(clavePropio(p.n)) ? 'activo' : '', (b) => {
         if ($('dmEditar').checked) {
           sonidos.quitarPropio(clavePropio(p.n));
-          dm.propios = dm.propios.filter((x) => x !== p); guardar(); pintarDM();
+          dm.propios = dm.propios.filter((x) => x !== p); guardar(); pintarDM(); publicarSonidos();
         } else {
           b.classList.toggle('activo', sonidos.alternarPropio(clavePropio(p.n), seccion === 'ambientes', () => b.classList.remove('activo')));
+          if (seccion === 'ambientes') publicarSonidos();
+          else if (sonidos.propioSonando(clavePropio(p.n))) sala.enviarEfecto({ propio: p.n });
         }
       });
     }
@@ -673,56 +677,262 @@ $('dmArchivo').addEventListener('change', async (ev) => {
   const archivo = ev.target.files[0], seccion = seccionElegida, dm = datosDM();
   ev.target.value = '';
   if (!archivo || !seccion) return;
-  if (dm.propios.length >= MAX_PROPIOS) { ponerEstado('Llegaste al máximo de sonidos propios. Quitá alguno para agregar otro.'); return; }
+  const dePersonajes = Object.values(dm.personajes).flat();
+  if (dm.propios.length + dePersonajes.length >= MAX_PROPIOS) { ponerEstado('Llegaste al máximo de sonidos propios. Quitá alguno para agregar otro.'); return; }
   // Se reutiliza el primer número libre, para no acumular archivos viejos.
-  const usados = new Set(dm.propios.map((p) => p.n));
+  const usados = new Set([...dm.propios, ...dePersonajes].map((p) => p.n));
   let n = 1; while (usados.has(n)) n++;
   try {
     const datos = await archivo.arrayBuffer();
     await sonidos.cargarPropio(clavePropio(n), datos);
     await puente.consultar('guardar-archivo', { tipo: 'sonido' + n, datos });
-    dm.propios.push({ n, nombre: archivo.name.replace(/\.[^.]+$/, ''), seccion });
+    const nombre = archivo.name.replace(/\.[^.]+$/, '');
+    if (typeof seccion === 'string') dm.propios.push({ n, nombre, seccion });
+    else (dm.personajes[seccion.personaje] = dm.personajes[seccion.personaje] || []).push({ n, nombre });   // sonido de un personaje
     guardar();
     pintarDM();
+    if (sala.conectada) pintarGente(sala.gente());
   } catch (e) {
     console.error('No se pudo cargar el sonido: ' + (e.message || e));
     ponerEstado('No se pudo leer ese archivo de audio. Probá con MP3, WAV u OGG.');
   }
 });
 $('dmVolumen').addEventListener('input', (ev) => sonidos.volumenGeneral(Number(ev.target.value)));
-$('dmSilencio').addEventListener('click', () => { sonidos.silenciarTodo(); pintarDM(); });
-$('dmEditar').addEventListener('change', pintarDM);
+$('dmSilencio').addEventListener('click', () => { sonidos.silenciarTodo(); pintarDM(); publicarSonidos(); });
+$('dmEditar').addEventListener('change', () => { pintarDM(); if (sala.conectada) pintarGente(sala.gente()); });
 $('dmRestaurar').addEventListener('click', () => { const dm = datosDM(); dm.ocultos = { ambientes: [], efectos: [] }; guardar(); pintarDM(); });
 
 // Al arrancar, se vuelven a cargar los sonidos propios guardados.
 async function restaurarSonidos() {
   const dm = datosDM();
-  for (const p of [...dm.propios]) {
+  const cargar = async (p) => {
     try {
       const r = await fetch('/usuario/sonido-' + p.n + '.bin');
       if (!r.ok) throw new Error('no está el archivo');
       await sonidos.cargarPropio(clavePropio(p.n), await r.arrayBuffer());
-    } catch (e) {
-      console.error('Sonido "' + p.nombre + '": ' + (e.message || e));
-      dm.propios = dm.propios.filter((x) => x !== p);
-    }
+      return true;
+    } catch (e) { console.error('Sonido "' + p.nombre + '": ' + (e.message || e)); return false; }
+  };
+  for (const p of [...dm.propios]) if (!(await cargar(p))) dm.propios = dm.propios.filter((x) => x !== p);
+  for (const [personaje, lista] of Object.entries(dm.personajes)) {
+    for (const p of [...lista]) if (!(await cargar(p))) dm.personajes[personaje] = dm.personajes[personaje].filter((x) => x !== p);
   }
   pintarDM();
 }
 
+// ---------- Sala de la mesa ----------
+// El Dungeon Master crea la sala y los jugadores entran con el código. A partir de ahí, lo
+// que el DM hace en su panel (ambientes, efectos, fondo, vidas) llega a todos.
+const rolActual = () => (document.body.classList.contains('rol-jugador') ? 'jugador' : 'dm');
+const aBytes = (d) => (d instanceof Uint8Array ? d : new Uint8Array(d instanceof ArrayBuffer ? d : d.buffer));
+let versionFondoSala = null, fondoDeSala = false, sonandoDeSala = new Set(), ultimaMesa = MESA_VACIA;
+
+const sala = new Sala({
+  alCambiarGente: (lista) => pintarGente(lista),
+  alCambiarMesa: (mesa) => {
+    ultimaMesa = mesa;
+    if (!sala.soyDM) obedecerMesa(mesa);
+    // Al DM se le refrescan las vidas (por ejemplo al reabrir la sala), salvo que esté escribiendo una.
+    else if (!$('salaGente').contains(document.activeElement)) pintarGente(sala.gente()); if (puente.pruebaSala) console.log('SALA mesa: ' + JSON.stringify(mesa)); },
+  alEfecto: (dato) => { if (!sala.soyDM) tocarEfectoDeSala(dato); if (puente.pruebaSala) console.log('SALA efecto: ' + JSON.stringify(dato)); },
+  alError: (texto) => { $('salaEstado').textContent = 'Problema de conexión: ' + texto; },
+});
+
+// El DM publica qué ambientes están sonando.
+function publicarSonidos() {
+  if (!sala.conectada || !sala.soyDM) return;
+  const dm = datosDM();
+  const ambientes = sonidos.listaAmbientes().filter((a) => sonidos.ambienteActivo(a.id)).map((a) => a.id);
+  const propios = dm.propios.filter((p) => p.seccion === 'ambientes' && sonidos.propioSonando(clavePropio(p.n))).map((p) => p.n);
+  sala.fijarMesa((m) => ({ ...m, ambientes, propios }));
+}
+
+// Los sonidos propios del DM se piden una sola vez y quedan cargados mientras dure la sala.
+const claveSala = (n) => 'sala' + n;
+async function asegurarAudioDeSala(n) {
+  if (sonidos.tienePropio(claveSala(n))) return;
+  const bytes = aBytes(await sala.pedirArchivo({ que: 'audio', n }));
+  await sonidos.cargarPropio(claveSala(n), bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+}
+function tocarEfectoDeSala(dato) {
+  if (dato && dato.id) sonidos.tocarEfecto(dato.id);
+  else if (dato && dato.propio) asegurarAudioDeSala(dato.propio).then(() => sonidos.ponerPropio(claveSala(dato.propio), true, false)).catch((e) => console.error('Efecto de sala: ' + (e.message || e)));
+}
+
+// El jugador aplica lo que fijó el DM.
+function obedecerMesa(mesa) {
+  for (const a of sonidos.listaAmbientes()) sonidos.ponerAmbiente(a.id, (mesa.ambientes || []).includes(a.id));
+  const pedidos = new Set(mesa.propios || []);
+  for (const n of sonandoDeSala) if (!pedidos.has(n)) sonidos.ponerPropio(claveSala(n), false, true);
+  sonandoDeSala = pedidos;
+  for (const n of pedidos) {
+    asegurarAudioDeSala(n).then(() => { if (sonandoDeSala.has(n)) sonidos.ponerPropio(claveSala(n), true, true); })
+      .catch((e) => console.error('Ambiente de sala: ' + (e.message || e)));
+  }
+  if (mesa.fondo && mesa.fondo.v !== versionFondoSala) {
+    versionFondoSala = mesa.fondo.v; fondoDeSala = true;
+    if (mesa.fondo.tipo === 'imagen') {
+      sala.pedirArchivo({ que: 'fondo' }).then((d) => {
+        const bytes = aBytes(d);
+        if (puente.pruebaSala) console.log('SALA fondo recibido: ' + bytes.byteLength + ' bytes');
+        ponerFondoImagen(URL.createObjectURL(new Blob([bytes])));
+      }).catch((e) => console.error('Fondo de sala: ' + (e.message || e)));
+    } else {
+      if (texturaFondo) { texturaFondo.dispose(); texturaFondo = null; }
+      escena.background = new THREE.Color(mesa.fondo.color || '#1d2230');
+    }
+  }
+  const vida = mesa.vidas && mesa.vidas[sala.yo];
+  const texto = vida ? 'Vida: ' + vida.actual + ' / ' + vida.max : '';
+  $('salaVida').hidden = !vida; $('salaVida').textContent = texto;
+  const yo = sala.gente().find((p) => p.yo);
+  $('hud').style.display = vida ? 'block' : 'none';
+  $('hud').innerHTML = '';
+  if (vida) { $('hud').append((yo && yo.personaje) || 'Tu personaje', ' — '); const b = document.createElement('b'); b.textContent = vida.actual + ' / ' + vida.max; $('hud').append(b); }
+}
+
+function pintarGente(lista) {
+  const caja = $('salaGente');
+  caja.textContent = '';
+  if (!sala.conectada) return;
+  const jugadores = lista.filter((p) => p.rol !== 'dm'), dms = lista.filter((p) => p.rol === 'dm');
+  $('salaEstado').textContent = 'Conectada. En la mesa: ' + jugadores.length + (jugadores.length === 1 ? ' jugador' : ' jugadores') +
+    (dms.length ? '' : '. Todavía no entró el Dungeon Master.');
+  for (const p of lista) {
+    const fila = document.createElement('div'); fila.className = 'persona';
+    const quien = document.createElement('span'); quien.className = 'quien';
+    const b = document.createElement('b'); b.textContent = p.rol === 'dm' ? 'Dungeon Master' : (p.personaje || 'Sin personaje');
+    quien.append(b, ' · ' + (p.jugador || 'Sin nombre') + (p.yo ? ' (vos)' : ''));
+    fila.append(quien);
+    if (sala.soyDM && p.rol !== 'dm') {
+      const vida = (ultimaMesa.vidas && ultimaMesa.vidas[p.userId]) || { actual: 10, max: 10 };
+      const numero = (valor) => { const i = document.createElement('input'); i.type = 'number'; i.min = 0; i.max = 9999; i.value = valor; return i; };
+      const actual = numero(vida.actual), max = numero(vida.max);
+      const fijar = () => {
+        const v = { actual: Math.max(0, Math.round(Number(actual.value) || 0)), max: Math.max(1, Math.round(Number(max.value) || 1)) };
+        sala.fijarMesa((m) => ({ ...m, vidas: { ...(m.vidas || {}), [p.userId]: v } }));
+      };
+      actual.addEventListener('change', fijar); max.addEventListener('change', fijar);
+      fila.append('Vida ', actual, ' / ', max);
+      // Sonidos de este personaje: los guarda el DM con el nombre del personaje, así vuelven
+      // a aparecer en la próxima sesión. Suenan una vez, para toda la mesa.
+      const personaje = p.personaje || p.jugador || 'Sin nombre', dm = datosDM(), editando = $('dmEditar').checked;
+      const grilla = document.createElement('div'); grilla.className = 'grilla'; grilla.style.marginTop = '6px';
+      for (const son of dm.personajes[personaje] || []) {
+        const b = document.createElement('button');
+        b.textContent = (editando ? '✕ ' : '') + son.nombre; b.title = son.nombre; if (editando) b.className = 'quitar';
+        b.addEventListener('click', () => {
+          if ($('dmEditar').checked) {
+            sonidos.quitarPropio(clavePropio(son.n));
+            dm.personajes[personaje] = dm.personajes[personaje].filter((x) => x !== son);
+            guardar(); pintarGente(sala.gente());
+          } else {
+            sonidos.ponerPropio(clavePropio(son.n), true, false);
+            sala.enviarEfecto({ propio: son.n });
+          }
+        });
+        grilla.append(b);
+      }
+      if (!editando) {
+        const mas = document.createElement('button'); mas.textContent = '+ Sonido'; mas.className = 'vacio'; mas.title = 'Agregar un sonido para ' + personaje;
+        mas.addEventListener('click', () => { seccionElegida = { personaje }; $('dmArchivo').click(); });
+        grilla.append(mas);
+      }
+      fila.append(grilla);
+    }
+    caja.append(fila);
+  }
+}
+
+function estadoDeSala(conectada) {
+  $('salaSalir').hidden = !conectada;
+  $('salaCrear').disabled = $('salaUnirse').disabled = conectada;
+  $('salaCodigo').disabled = conectada;
+  $('salaFondo').hidden = !(conectada && sala.soyDM);
+  if (!conectada) { $('salaGente').textContent = ''; $('salaVida').hidden = true; $('hud').style.display = 'none'; }
+}
+
+async function entrarSala(codigo, opciones) {
+  codigo = limpiarCodigo(codigo);
+  if (codigo.length < 4) { $('salaEstado').textContent = 'El código tiene que tener al menos 4 letras o números.'; return; }
+  $('salaCodigo').value = codigo;
+  $('salaEstado').textContent = 'Conectando…';
+  estadoDeSala(true);
+  try {
+    const rol = rolActual();
+    await sala.entrar({ codigo, rol, jugador: $('salaJugador').value.trim(), personaje: $('salaPersonaje').value.trim() }, opciones);
+    guardar({ sala: { codigo, jugador: $('salaJugador').value.trim(), personaje: $('salaPersonaje').value.trim() } });
+    if (rol === 'dm') {
+      // El DM entrega a quien lo pida su imagen de fondo y sus sonidos propios.
+      sala.ofrecerArchivos(async (pedido) => {
+        const ruta = pedido && pedido.que === 'fondo' ? '/usuario/fondo.img' : '/usuario/sonido-' + Number(pedido && pedido.n) + '.bin';
+        const r = await fetch(ruta);
+        if (!r.ok) throw new Error('No tengo ese archivo');
+        return new Uint8Array(await r.arrayBuffer());
+      });
+      publicarSonidos();
+      $('salaEstado').textContent = 'Sala abierta. Pasales este código a los jugadores: ' + codigo;
+    } else {
+      $('salaEstado').textContent = 'Conectada. Esperando al Dungeon Master…';
+    }
+    estadoDeSala(true);
+    pintarGente(sala.gente());
+  } catch (e) {
+    console.error('No se pudo entrar a la sala: ' + (e.stack || e.message || e));
+    $('salaEstado').textContent = 'No se pudo conectar. Revisá tu conexión a internet y probá de nuevo.';
+    estadoDeSala(false);
+  }
+}
+async function salirDeSala() {
+  const eraJugador = !sala.soyDM;
+  await sala.salir();
+  estadoDeSala(false);
+  $('salaEstado').textContent = 'Sin conectar.';
+  if (eraJugador) {
+    // Se apagan los sonidos de la sala y vuelve el fondo propio.
+    sonidos.silenciarTodo(); sonandoDeSala = new Set();
+    if (fondoDeSala) { fondoDeSala = false; versionFondoSala = null; if (ajustes.fondoImagen) ponerFondoImagen('/usuario/fondo.img'); else quitarFondoImagen(); }
+  }
+}
+$('salaCrear').addEventListener('click', () => entrarSala(nuevoCodigo()));
+$('salaUnirse').addEventListener('click', () => entrarSala($('salaCodigo').value));
+$('salaSalir').addEventListener('click', salirDeSala);
+$('salaVolumen').addEventListener('input', (e) => sonidos.volumenGeneral(Number(e.target.value)));
+$('salaFondo').addEventListener('click', () => {
+  const fondo = texturaFondo && ajustes.fondoImagen ? { tipo: 'imagen', v: Date.now() } : { tipo: 'color', color: $('fondo').value, v: Date.now() };
+  sala.fijarMesa((m) => ({ ...m, fondo }));
+  $('salaEstado').textContent = 'Fondo enviado a toda la mesa.';
+});
+for (const id of ['salaJugador', 'salaPersonaje']) $(id).addEventListener('change', () => {
+  sala.actualizarPerfil({ jugador: $('salaJugador').value.trim(), personaje: $('salaPersonaje').value.trim() });
+});
+
 // ---------- Jugador o Dungeon Master ----------
 // Es el mismo programa para los dos; el rol solo decide qué se muestra. El jugador no ve
 // el panel del Dungeon Master.
+// El Dungeon Master no es un personaje: por defecto su ventana no usa cámara ni muestra un
+// personaje, solo el fondo y los paneles de dirección. Puede activarlos si quiere aparecer.
+let sinPersonaje = false;
+function aplicarVistaDM() {
+  sinPersonaje = !document.body.classList.contains('rol-jugador') && !$('dmConCamara').checked;
+  document.body.classList.toggle('sin-camara', sinPersonaje);
+  if (sinPersonaje) {
+    if ($('iniciar').disabled) puente.enviar('control', { tipo: 'pausa', valor: true });       // deja de seguir
+    if (camaraActiva) puente.enviar('camara', { tipo: 'detener' });
+  } else if ($('iniciar').disabled) puente.enviar('control', { tipo: 'pausa', valor: $('pausa').checked });
+}
 function aplicarRol(rol, recordar) {
   document.body.classList.toggle('rol-jugador', rol !== 'dm');
   $('rolSelector').value = rol === 'dm' ? 'dm' : 'jugador';
   if (rol === 'dm') $('dm').open = true;
+  aplicarVistaDM();
   $('rol').classList.remove('abierto');
   if (recordar) guardar({ rol });
 }
+$('dmConCamara').addEventListener('change', () => { aplicarVistaDM(); guardar({ dmConCamara: $('dmConCamara').checked }); });
 $('rolJugador').addEventListener('click', () => aplicarRol('jugador', true));
 $('rolDM').addEventListener('click', () => aplicarRol('dm', true));
-$('rolSelector').addEventListener('change', (e) => aplicarRol(e.target.value, true));
+$('rolSelector').addEventListener('change', async (e) => { if (sala.conectada) await salirDeSala(); aplicarRol(e.target.value, true); });
 
 // ---------- Bucle de dibujo ----------
 let tAnterior = performance.now();
@@ -732,7 +942,8 @@ function bucle() {
   const dt = Math.min((tAhora - tAnterior) / 1000, 0.25);
   tAnterior = tAhora;
   aplicarObjetivos(dt);
-  if (vrm) vrm.update(dt);
+  if (vrm) { vrm.scene.visible = !sinPersonaje; vrm.update(dt); }
+  if (titere) { titere.objeto.visible = !sinPersonaje; }
   if (titere) titere.actualizar(dt, 1 - Math.exp(-dt * (30 - 26 * Number($('suavizado').value))));
   renderer.render(escena, camara);
   enviarCuadroCamara(tAhora);
@@ -784,8 +995,10 @@ window.addEventListener('drop', (e) => {
     if (!bien) cargarVRM('/recursos/muestra.vrm', 'personaje de ejemplo');
   }
   restaurarSonidos();
+  if (ajustes.sala) { $('salaJugador').value = ajustes.sala.jugador || ''; $('salaPersonaje').value = ajustes.sala.personaje || ''; $('salaCodigo').value = ajustes.sala.codigo || ''; }
+  $('dmConCamara').checked = !!ajustes.dmConCamara || (puente.prueba && !puente.pruebaSala);
   if (ajustes.rol) aplicarRol(ajustes.rol, false);
-  else if (puente.prueba) aplicarRol('dm', false);
+  else if (puente.prueba) aplicarRol(location.search.includes('jugador') ? 'jugador' : 'dm', false);
   else $('rol').classList.add('abierto');     // primera vez: se pregunta el rol
   console.log('Ajustes restaurados: ' + JSON.stringify(ajustes));
 })();
@@ -816,6 +1029,30 @@ if (puente.prueba2d) {
       console.log('PRUEBA 2D armada (' + puente.prueba2d + ')');
     } catch (e) { console.error('PRUEBA 2D FALLÓ: ' + (e.stack || e)); }
   }, 2500);
+}
+
+// ---------- Prueba automática de la sala (ROLCAM_PRUEBA_SALA = dirección de un relé local) ----------
+if (puente.pruebaSala) {
+  const soyJugador = location.search.includes('jugador');
+  const opciones = { relayConfig: { urls: [puente.pruebaSala] }, identity: 'none', rtcConfig: { iceServers: [] } };
+  setTimeout(async () => {
+    try {
+      $('salaJugador').value = soyJugador ? 'Ana' : 'Juan'; $('salaPersonaje').value = soyJugador ? 'Maga Lira' : '';
+      await entrarSala('PRUEBA1', opciones);
+      console.log('SALA conectada como ' + rolActual());
+      if (soyJugador) return;
+      const espera = setInterval(() => {
+        const jugador = sala.gente().find((p) => p.rol === 'jugador');
+        if (!jugador) return;
+        clearInterval(espera);
+        console.log('SALA DM ve al jugador: ' + jugador.jugador + ' / ' + jugador.personaje);
+        [...document.querySelectorAll('#dmAmbientes button')].find((b) => b.textContent === 'Lluvia').click();
+        sala.fijarMesa((m) => ({ ...m, vidas: { [jugador.userId]: { actual: 7, max: 12 } }, fondo: { tipo: 'color', color: '#445566', v: 1 } }));
+        [...document.querySelectorAll('#dmEfectos button')].find((b) => b.textContent === 'Campana').click();
+        setTimeout(() => sala.fijarMesa((m) => ({ ...m, fondo: { tipo: 'imagen', v: 2 } })), 1500);
+      }, 500);
+    } catch (e) { console.error('PRUEBA SALA FALLÓ: ' + (e.stack || e)); }
+  }, 3000);
 }
 
 // ---------- Prueba automática de sonidos (ROLCAM_PRUEBA_SONIDO) ----------

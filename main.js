@@ -67,6 +67,13 @@ function crearVentanas() {
   reenviarConsola(seguimiento, 'seguimiento');
 
   escenario.on('closed', () => app.quit());
+
+  // Prueba automática de la sala: una segunda ventana hace de jugador.
+  if (process.env.ROLCAM_PRUEBA_SALA) {
+    const jugador = new BrowserWindow({ width: 900, height: 600, webPreferences: { preload, backgroundThrottling: false } });
+    jugador.loadURL('app://local/src/escenario.html?jugador=1');
+    reenviarConsola(jugador, 'jugador');
+  }
 }
 
 app.whenReady().then(() => {

@@ -84,6 +84,10 @@ ventanas aparecen en la terminal donde corriste `npm start`.
 Al abrir RolCam por primera vez se elige **Jugador** o **Dungeon Master** (se cambia después
 en "Uso de RolCam"). Es el mismo programa; el jugador simplemente no ve este panel.
 
+El Dungeon Master no es un personaje, así que su ventana no usa cámara ni muestra un
+personaje: solo el fondo y los paneles de dirección. Si quiere aparecer en cámara, tilda
+**Usar también cámara y personaje**.
+
 El panel tiene dos listas:
 
 - **Ambientes**, que se repiten hasta apagarlos y se pueden combinar: lluvia, viento
@@ -99,6 +103,30 @@ midiendo grabaciones de referencia (qué graves, qué ritmo, cuánto duran), sin
 
 Para que los jugadores los escuchen, el DM comparte la ventana de RolCam **con sonido** en
 Discord. Todavía no hay una "sala" que conecte los programas de la mesa (ver hoja de ruta).
+
+## Sala de la mesa
+
+La sala conecta el RolCam del Dungeon Master con los de los jugadores:
+
+1. El DM escribe su nombre y toca **Crear sala nueva**. Aparece un código de seis letras.
+2. Cada jugador escribe su nombre, el de su personaje y el código, y toca **Entrar con ese
+   código**.
+
+Con la sala abierta, lo que hace el DM llega a todos:
+
+- Los **ambientes y efectos** suenan en el programa de cada jugador (también los archivos
+  propios del DM, que se envían la primera vez que hacen falta).
+- **Poner mi fondo a toda la mesa** aplica el fondo del DM a todos los personajes.
+- El DM ve la **lista de la mesa** y lleva los **puntos de vida** de cada personaje; cada
+  jugador ve los suyos.
+- Debajo de cada personaje, el DM puede cargarle **sonidos propios** con "+ Sonido" (un
+  hechizo para el mago, una espada para el guerrero). Quedan guardados con el nombre del
+  personaje y suenan para toda la mesa.
+
+La conexión es directa entre los programas, sin servidor propio. Para encontrarse usan
+servidores públicos (relés Nostr, a través de la librería Trystero); por ahí solo pasa el
+saludo inicial, cifrado con el código de la sala. En algunas redes muy cerradas la conexión
+directa puede no establecerse.
 
 ## Cámara virtual propia
 
@@ -136,6 +164,7 @@ ubicación del componente. El panel de controles nunca sale en la cámara.
 | `preload.js` | Puente seguro entre las ventanas y el proceso principal |
 | `src/escenario.*` | Ventana visible: dibuja el personaje y convierte puntos en movimiento de huesos |
 | `src/importar.js` | Importa modelos `.glb` / `.fbx`: reconoce los huesos y arma el esqueleto normalizado |
+| `src/sala.js` | Sala de la mesa: conexión directa entre el DM y los jugadores |
 | `src/sonidos.js` | Sonidos del panel del Dungeon Master, generados por código |
 | `src/titere2d.js` | Personaje ilustrado 2.5D a partir de una imagen |
 | `src/seguimiento.*` | Ventana oculta: abre la webcam y corre MediaPipe en un proceso aparte |
@@ -154,6 +183,7 @@ fluido aunque el seguimiento vaya a pocos cuadros por segundo.
 - [Kalidokit](https://github.com/yeemachine/kalidokit) — MIT (cara y dedos)
 - [Electron](https://github.com/electron/electron) — MIT
 - [Softcam](https://github.com/tshino/softcam) — MIT (cámara virtual)
+- [Trystero](https://github.com/dmotz/trystero) — MIT (conexión entre jugadores)
 - Personaje de ejemplo: VRM1_Constraint_Twist_Sample, (c) 2022 pixiv Inc., redistribuible según su licencia VRM
 
 El estado del proyecto y lo que falta están en [docs/HOJA-DE-RUTA.md](docs/HOJA-DE-RUTA.md).

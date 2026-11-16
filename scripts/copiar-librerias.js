@@ -21,4 +21,12 @@ for (const relativo of ARCHIVOS) {
   fs.mkdirSync(path.dirname(destino), { recursive: true });
   fs.copyFileSync(path.join(ORIGEN, relativo), destino);
 }
-console.log('Librerías copiadas a src/vendor: ' + ARCHIVOS.length + ' archivos.');
+// Trystero (conexión directa entre jugadores para la sala) viene repartido en varios paquetes;
+// se junta en un solo archivo que la app puede cargar sin empaquetador.
+require('esbuild').buildSync({
+  entryPoints: [path.join(__dirname, '..', 'node_modules', 'trystero', 'dist', 'index.mjs')],
+  bundle: true, format: 'esm', minify: true, legalComments: 'none',
+  outfile: path.join(__dirname, '..', 'src', 'vendor', 'trystero.js'),
+});
+
+console.log('Librerías preparadas en src/vendor: ' + (ARCHIVOS.length + 1) + ' archivos.');
